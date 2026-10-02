@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GoldAI Admin</title><link rel="stylesheet" href="styles.css"></head><body><main>
+<div id="login" class="panel"><h1>GoldAI Admin</h1><input id="ap" type="password" placeholder="Admin password"><button id="al">Login</button><p id="am" class="msg"></p></div>
+<div id="admin" class="hidden"><div class="row"><h1>Admin Dashboard</h1><button id="logout" class="ghost">Logout</button></div><div class="panel"><h2>Pending Payments</h2><div id="payments"></div></div>
+<div class="panel"><h2>Publish XAUUSD Signal</h2><input id="st" placeholder="Title e.g. XAUUSD SELL NOW"><textarea id="sb" placeholder="Signal body, for example:
+XAUUSD SELL 4395
+TP1 4393
+TP2 4391
+SL 4405"></textarea><button id="publish">Publish signal</button><p id="pm" class="msg"></p></div>
+<div class="panel"><h2>Published Signals</h2><div id="signals"></div></div><div class="panel"><h2>Support Messages</h2><div id="support"></div></div></div></main>
+<script>
+const $=s=>document.querySelector(s);async function api(u,o={}){let r=await fetch(u,o),j={};try{j=await r.json()}catch{}if(!r.ok)throw Error(j.error||"Request failed");return j}
+async function load(){try{let d=await api("/api/admin/data");$("#login").classList.add("hidden");$("#admin").classList.remove("hidden");
+$("#payments").innerHTML=d.payments.length?d.payments.map(p=>`<div class="card"><b>${p.userName}</b><small>${p.userEmail} • ${p.amount} • ${p.method}</small><p>Reference: <strong>${esc(p.reference)}</strong><br>Status: ${p.status}<br><a href="${p.receipt}" target="_blank">Open receipt</a></p>${p.status==="pending"?`<button onclick="act('${p.id}','approve')">Approve</button> <button class="ghost" onclick="act('${p.id}','reject')">Reject</button>`:""}</div>`).join(""):"No payments yet.";
+$("#signals").innerHTML=d.signals.map(s=>`<div class="signal"><b>${esc(s.title)}</b><br>${esc(s.body)}<br><button class="ghost" onclick="del('${s.id}')">Delete</button></div>`).join("")||"No signals.";
+$("#support").innerHTML=d.support.map(s=>`<div class="card"><b>${esc(s.userEmail)}</b><p>${esc(s.message)}</p></div>`).join("")||"No messages.";
+}catch(e){$("#login").classList.remove("hidden");$("#admin").classList.add("hidden")}}
+window.act=async(id,a)=>{await api("/api/admin/payments/"+id+"/"+a,{method:"POST"});load()}
+window.del=async(id)=>{await api("/api/admin/signals/"+id,{method:"DELETE"});load()}
+$("#al").onclick=async()=>{try{await api("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("#ap").value})});load()}catch(e){$("#am").textContent=e.message}}
+$("#logout").onclick=async()=>{await api("/api/logout",{method:"POST"});location.reload()}
+$("#publish").onclick=async()=>{try{await api("/api/admin/signals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:$("#st").value,body:$("#sb").value})});$("#st").value="";$("#sb").value="";$("#pm").textContent="Published.";load()}catch(e){$("#pm").textContent=e.message}}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}load();
+</script></body></html>
