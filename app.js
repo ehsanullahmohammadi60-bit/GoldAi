@@ -1,946 +1,1113 @@
-const $ = selector =>
-  document.querySelector(selector);
+const $ = (id) => document.getElementById(id);
 
-let method = "hesabpay";
-
-
-/* =========================
-   TRANSLATIONS
-========================= */
-
-const T = {
-
-  en: {
-    heroTitle:
-      "Professional Gold Analysis",
-
-    heroText:
-      "Upload your XAUUSD chart and let GoldAI analyze the visible market structure."
-  },
-
-  fa: {
-    heroTitle:
-      "تحلیل حرفه‌ای طلا",
-
-    heroText:
-      "عکس چارت XAUUSD خود را آپلود کنید تا GoldAI ساختار قابل مشاهده بازار را تحلیل کند."
-  },
-
-  ar: {
-    heroTitle:
-      "تحليل احترافي للذهب",
-
-    heroText:
-      "قم برفع صورة شارت XAUUSD ودع GoldAI يحلل هيكل السوق الظاهر."
-  }
-
-};
-
+let currentUser = null;
+let selectedChartFile = null;
 
 /* =========================
-   LANGUAGE
+   Helpers
 ========================= */
 
-function lang() {
-  return localStorage.goldaiLang || "en";
+function showMessage(id, text, type = "") {
+  const el = $(id);
+  if (!el) return;
+
+  el.textContent = text || "";
+  el.className = type ? `message ${type}` : "message";
 }
-
-function setLang(value) {
-
-  localStorage.goldaiLang = value;
-
-  document.documentElement.lang =
-    value;
-
-  document.documentElement.dir =
-    value === "en"
-      ? "ltr"
-      : "rtl";
-
-  if ($("#heroTitle")) {
-    $("#heroTitle").textContent =
-      T[value].heroTitle;
-  }
-
-  if ($("#heroText")) {
-    $("#heroText").textContent =
-      T[value].heroText;
-  }
-}
-
-
-$("#lang").value = lang();
-
-$("#lang").onchange = event => {
-  setLang(event.target.value);
-};
-
-setLang(lang());
-
-
-/* =========================
-   API
-========================= */
 
 async function api(url, options = {}) {
-
-  const response =
-    await fetch(url, options);
+  const response = await fetch(url, options);
 
   let data = {};
-
   try {
     data = await response.json();
-  } catch {
+  } catch (_) {
     data = {};
   }
 
   if (!response.ok) {
     throw new Error(
       data.error ||
-      "Request failed."
+      data.message ||
+      `Request failed (${response.status})`
     );
   }
 
   return data;
 }
 
+function textValue(value, fallback = "صبر کن") {
+  if (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    String(value).trim() === ""
+  ) {
+    return fallback;
+  }
 
-/* =========================
-   AUTH TABS
-========================= */
+  return String(value);
+}
 
-document
-  .querySelectorAll(".tab")
-  .forEach(button => {
+/*
+  AI ممکن است بعضی فیلدها را با نام‌های مختلف برگرداند.
+  این تابع همه نام‌های رایج را بررسی می‌کند.
+*/
+function getField(obj, names, fallback = "صبر کن") {
+  if (!obj || typeof obj !== "object") {
+    return fallback;
+  }
 
-    button.onclick = () => {
-
-      document
-        .querySelectorAll(".tab")
-        .forEach(item =>
-          item.classList.remove("active")
-        );
-
-      button.classList.add("active");
-
-      $("#loginForm")
-        .classList.toggle(
-          "hidden",
-          button.dataset.tab !== "login"
-        );
-
-      $("#registerForm")
-        .classList.toggle(
-          "hidden",
-          button.dataset.tab !== "register"
-        );
-
-      $("#authMsg").textContent = "";
-    };
-
-  });
-
-
-/* =========================
-   REGISTER
-========================= */
-
-$("#registerForm").onsubmit =
-  async event => {
-
-    event.preventDefault();
-
-    $("#authMsg").textContent =
-      "Creating account...";
-
-    try {
-
-      await api(
-        "/api/register",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-            name:
-              $("#regName").value,
-
-            email:
-              $("#regEmail").value,
-
-            password:
-              $("#regPass").value
-          })
-        }
-      );
-
-      await load();
-
-    } catch (error) {
-
-      $("#authMsg").textContent =
-        error.message;
+  for (const name of names) {
+    if (
+      obj[name] !== undefined &&
+      obj[name] !== null &&
+      String(obj[name]).trim() !== ""
+    ) {
+      return obj[name];
     }
-  };
+  }
 
-
-/* =========================
-   LOGIN
-========================= */
-
-$("#loginForm").onsubmit =
-  async event => {
-
-    event.preventDefault();
-
-    $("#authMsg").textContent =
-      "Signing in...";
-
-    try {
-
-      await api(
-        "/api/login",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-            email:
-              $("#loginEmail").value,
-
-            password:
-              $("#loginPass").value
-          })
-        }
-      );
-
-      await load();
-
-    } catch (error) {
-
-      $("#authMsg").textContent =
-        error.message;
-    }
-  };
-
+  return fallback;
+}
 
 /* =========================
-   LOGOUT
+   Auth
 ========================= */
 
-$("#logout").onclick =
-  async () => {
+async function registerUser(event) {
+  event.preventDefault();
 
-    try {
+  const name = $("registerName")?.value.trim();
+  const email = $("registerEmail")?.value.trim();
+  const password = $("registerPassword")?.value;
 
-      await api(
-        "/api/logout",
-        {
-          method: "POST"
-        }
-      );
+  if (!name || !email || !password) {
+    showMessage("authMsg", "لطفاً تمام معلومات را وارد کنید.", "error");
+    return;
+  }
 
-    } finally {
+  try {
+    showMessage("authMsg", "در حال ساخت حساب...");
 
-      await load();
-    }
-  };
-
-
-/* =========================
-   PAYMENT METHOD
-========================= */
-
-function showMethod() {
-
-  document
-    .querySelectorAll(".pay")
-    .forEach(button => {
-
-      button.classList.toggle(
-        "active",
-        button.dataset.method === method
-      );
-
+    const data = await api("/api/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name,
+        email,
+        password
+      })
     });
 
+    if (data.user) {
+      currentUser = data.user;
+    }
 
-  if (method === "hesabpay") {
+    showMessage(
+      "authMsg",
+      data.message || "حساب با موفقیت ساخته شد.",
+      "success"
+    );
 
-    $("#payDetails").innerHTML = `
-      <b>HesabPay — 240 AFN</b>
-      <br>
-      Send the exact activation fee to:
-      <br>
-      <strong>9004134056412319</strong>
-      <br>
-      <small>
-        Then upload your payment receipt.
-        Never enter a PIN or password.
-      </small>
-    `;
-
-  } else {
-
-    $("#payDetails").innerHTML = `
-      <b>Binance Pay — 4 USD / USDT</b>
-      <br>
-      Send the exact activation fee using Binance Pay to:
-      <br>
-      <strong>760897285</strong>
-      <br>
-      <small>
-        Then upload your payment receipt.
-        Never share a seed phrase or private key.
-      </small>
-    `;
+    await load();
+  } catch (error) {
+    showMessage("authMsg", error.message, "error");
   }
 }
 
+async function loginUser(event) {
+  event.preventDefault();
 
-document
-  .querySelectorAll(".pay")
-  .forEach(button => {
+  const email = $("loginEmail")?.value.trim();
+  const password = $("loginPassword")?.value;
 
-    button.onclick = () => {
+  if (!email || !password) {
+    showMessage("authMsg", "ایمیل و رمز عبور را وارد کنید.", "error");
+    return;
+  }
 
-      method =
-        button.dataset.method;
+  try {
+    showMessage("authMsg", "در حال ورود...");
 
-      showMethod();
-    };
+    const data = await api("/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email,
+        password
+      })
+    });
 
-  });
+    currentUser = data.user || null;
 
-
-showMethod();
-
-
-/* =========================
-   PAYMENT SUBMISSION
-========================= */
-
-$("#paymentForm").onsubmit =
-  async event => {
-
-    event.preventDefault();
-
-    const file =
-      $("#receipt").files[0];
-
-    if (!file) {
-
-      $("#payMsg").textContent =
-        "Please select your payment receipt.";
-
-      return;
-    }
-
-    $("#payMsg").textContent =
-      "Uploading receipt...";
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      "method",
-      method
+    showMessage(
+      "authMsg",
+      data.message || "ورود موفق بود.",
+      "success"
     );
 
-    formData.append(
-      "reference",
-      $("#reference").value
+    await load();
+  } catch (error) {
+    showMessage("authMsg", error.message, "error");
+  }
+}
+
+async function logoutUser() {
+  try {
+    await api("/api/logout", {
+      method: "POST"
+    });
+  } catch (_) {}
+
+  currentUser = null;
+
+  const authSection = $("authSection");
+  const dashboard = $("dashboard");
+
+  if (authSection) authSection.style.display = "";
+  if (dashboard) dashboard.style.display = "none";
+}
+
+/* =========================
+   Payment
+========================= */
+
+async function submitPayment(event) {
+  event.preventDefault();
+
+  const reference =
+    $("paymentReference")?.value.trim() ||
+    $("reference")?.value.trim() ||
+    "";
+
+  const method =
+    $("paymentMethod")?.value ||
+    $("method")?.value ||
+    "manual";
+
+  const file =
+    $("receipt")?.files?.[0] ||
+    $("paymentReceipt")?.files?.[0];
+
+  if (!reference) {
+    showMessage(
+      "paymentMsg",
+      "لطفاً شماره یا Reference پرداخت را وارد کنید.",
+      "error"
+    );
+    return;
+  }
+
+  if (!file) {
+    showMessage(
+      "paymentMsg",
+      "لطفاً رسید پرداخت را انتخاب کنید.",
+      "error"
+    );
+    return;
+  }
+
+  try {
+    showMessage("paymentMsg", "در حال ارسال رسید...");
+
+    const formData = new FormData();
+
+    formData.append("reference", reference);
+    formData.append("method", method);
+    formData.append("receipt", file);
+
+    const data = await api("/api/payment", {
+      method: "POST",
+      body: formData
+    });
+
+    showMessage(
+      "paymentMsg",
+      data.message || "رسید ارسال شد و منتظر تأیید ادمین است.",
+      "success"
     );
 
-    formData.append(
-      "receipt",
-      file
+    await load();
+  } catch (error) {
+    showMessage("paymentMsg", error.message, "error");
+  }
+}
+
+/* =========================
+   Support
+========================= */
+
+async function sendSupport(event) {
+  event.preventDefault();
+
+  const message =
+    $("supportMessage")?.value.trim() ||
+    $("message")?.value.trim() ||
+    "";
+
+  if (!message) {
+    showMessage(
+      "supportMsg",
+      "لطفاً پیام خود را بنویسید.",
+      "error"
+    );
+    return;
+  }
+
+  try {
+    showMessage("supportMsg", "در حال ارسال...");
+
+    const data = await api("/api/support", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message
+      })
+    });
+
+    showMessage(
+      "supportMsg",
+      data.message || "پیام شما ارسال شد.",
+      "success"
     );
 
-    try {
-
-      await api(
-        "/api/payments",
-        {
-          method: "POST",
-          body: formData
-        }
-      );
-
-      $("#payMsg").textContent =
-        "Receipt submitted. Access remains locked until admin approval.";
-
-      await load();
-
-    } catch (error) {
-
-      $("#payMsg").textContent =
-        error.message;
+    if ($("supportMessage")) {
+      $("supportMessage").value = "";
     }
-  };
-
+  } catch (error) {
+    showMessage("supportMsg", error.message, "error");
+  }
+}
 
 /* =========================
-   SUPPORT
+   Chart Preview
 ========================= */
 
-$("#supportBtn").onclick =
-  async () => {
+function previewChart(event) {
+  const file = event.target.files?.[0];
 
-    const message =
-      $("#supportText").value.trim();
+  selectedChartFile = file || null;
 
-    if (!message) {
+  const previewWrap = $("chartPreviewWrap");
+  const preview = $("chartPreview");
 
-      $("#supportMsg").textContent =
-        "Please write a message.";
+  if (!file) {
+    if (previewWrap) previewWrap.style.display = "none";
+    return;
+  }
 
-      return;
-    }
+  if (!file.type.startsWith("image/")) {
+    selectedChartFile = null;
 
-    $("#supportMsg").textContent =
-      "Sending...";
+    if (previewWrap) previewWrap.style.display = "none";
 
-    try {
-
-      await api(
-        "/api/support",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify({
-            message
-          })
-        }
-      );
-
-      $("#supportText").value = "";
-
-      $("#supportMsg").textContent =
-        "Message sent.";
-
-    } catch (error) {
-
-      $("#supportMsg").textContent =
-        error.message;
-    }
-  };
-
-
-/* =========================
-   CHART PREVIEW
-========================= */
-
-$("#chartFile").onchange =
-  () => {
-
-    const file =
-      $("#chartFile").files[0];
-
-    if (!file) {
-
-      $("#chartPreviewWrap")
-        .classList.add("hidden");
-
-      return;
-    }
-
-    const reader =
-      new FileReader();
-
-    reader.onload = event => {
-
-      $("#chartPreview").src =
-        event.target.result;
-
-      $("#chartPreviewWrap")
-        .classList.remove("hidden");
-    };
-
-    reader.readAsDataURL(file);
-  };
-
-
-/* =========================
-   AI CHART ANALYSIS
-========================= */
-
-$("#chartForm").onsubmit =
-  async event => {
-
-    event.preventDefault();
-
-    const file =
-      $("#chartFile").files[0];
-
-    if (!file) {
-
-      $("#chartMsg").textContent =
-        "Please select a chart image.";
-
-      return;
-    }
-
-
-    if (file.size > 5 * 1024 * 1024) {
-
-      $("#chartMsg").textContent =
-        "Image must be smaller than 5 MB.";
-
-      return;
-    }
-
-
-    $("#analyzeBtn").disabled =
-      true;
-
-    $("#analyzeBtn").textContent =
-      "AI is analyzing...";
-
-    $("#chartMsg").textContent =
-      "Reading chart structure...";
-
-    $("#analysisResult")
-      .classList.add("hidden");
-
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      "chart",
-      file
+    showMessage(
+      "chartMsg",
+      "لطفاً فقط فایل تصویری چارت را انتخاب کنید.",
+      "error"
     );
 
+    return;
+  }
 
-    try {
+  if (preview) {
+    preview.src = URL.createObjectURL(file);
+  }
 
-      const result =
-        await api(
-          "/api/analyze-chart",
-          {
-            method: "POST",
-            body: formData
-          }
-        );
+  if (previewWrap) {
+    previewWrap.style.display = "block";
+  }
 
-
-      displayAnalysis(
-        result.analysis
-      );
-
-
-      $("#chartMsg").textContent =
-        "Analysis completed.";
-
-      await loadHistory();
-
-
-    } catch (error) {
-
-      $("#chartMsg").textContent =
-        error.message;
-
-    } finally {
-
-      $("#analyzeBtn").disabled =
-        false;
-
-      $("#analyzeBtn").textContent =
-        "Analyze Chart with AI";
-    }
-  };
-
+  showMessage("chartMsg", "");
+}
 
 /* =========================
-   DISPLAY ANALYSIS
+   AI Chart Analysis
 ========================= */
 
-function displayAnalysis(a) {
+async function analyzeChart(event) {
+  event.preventDefault();
 
-  const direction =
-    String(
-      a.direction || "WAIT"
-    ).toUpperCase();
+  const file =
+    selectedChartFile ||
+    $("chartFile")?.files?.[0];
 
+  if (!file) {
+    showMessage(
+      "chartMsg",
+      "لطفاً اول عکس چارت XAUUSD را انتخاب کنید.",
+      "error"
+    );
+    return;
+  }
 
-  $("#analysisDirection")
-    .textContent =
-    direction;
+  const button = $("analyzeBtn");
 
-  $("#analysisSymbol")
-    .textContent =
-    a.symbol || "XAUUSD";
+  if (button) {
+    button.disabled = true;
+    button.dataset.oldText = button.textContent;
+    button.textContent = "در حال تحلیل...";
+  }
 
-  $("#analysisTimeframe")
-    .textContent =
-    a.timeframe || "Unknown";
-
-  $("#analysisEntry")
-    .textContent =
-    a.entry || "WAIT";
-
-  $("#analysisSL")
-    .textContent =
-    a.sl || "WAIT";
-
-  $("#analysisTP1")
-    .textContent =
-    a.tp1 || "WAIT";
-
-  $("#analysisTP2")
-    .textContent =
-    a.tp2 || "WAIT";
-
-  $("#analysisTP3")
-    .textContent =
-    a.tp3 || "WAIT";
-
-  $("#analysisTP4")
-    .textContent =
-    a.tp4 || "WAIT";
-
-  $("#analysisTP5")
-    .textContent =
-    a.tp5 || "WAIT";
-
-  $("#analysisConfidence")
-    .textContent =
-    a.confidence || "Low";
-
-  $("#analysisTextContent")
-    .textContent =
-    a.analysis ||
-    "No detailed analysis returned.";
-
-  $("#analysisWarning")
-    .textContent =
-    a.warning ||
-    "Trading involves market risk. This analysis does not guarantee profit.";
-
-
-  const directionCard =
-    $("#directionCard");
-
-  directionCard.classList.remove(
-    "buy",
-    "sell",
-    "wait"
+  showMessage(
+    "chartMsg",
+    "هوش مصنوعی در حال تحلیل چارت است..."
   );
 
+  /*
+    قبل از دریافت نتیجه، کارت نتیجه را پاک می‌کنیم
+    تا اطلاعات تحلیل قبلی نمایش داده نشود.
+  */
+  resetAnalysisResult();
 
-  if (direction === "BUY") {
+  try {
+    const formData = new FormData();
 
-    directionCard.classList.add(
-      "buy"
+    formData.append("chart", file);
+
+    const data = await api("/api/analyze-chart", {
+      method: "POST",
+      body: formData
+    });
+
+    console.log("FULL AI RESPONSE:", data);
+
+    /*
+      Backend ممکن است پاسخ را در یکی از این قسمت‌ها قرار داده باشد.
+    */
+    let analysis =
+      data.analysis ||
+      data.result ||
+      data.signal ||
+      data.data ||
+      data;
+
+    /*
+      اگر analysis به شکل string باشد،
+      آن را به JSON تبدیل می‌کنیم.
+    */
+    if (typeof analysis === "string") {
+      try {
+        analysis = JSON.parse(analysis);
+      } catch (_) {
+        /*
+          اگر JSON نبود، متن را به عنوان متن تحلیل نگه می‌داریم.
+        */
+        analysis = {
+          analysis: analysis
+        };
+      }
+    }
+
+    /*
+      بعضی APIها پاسخ را داخل result.analysis می‌فرستند.
+    */
+    if (
+      analysis &&
+      typeof analysis === "object" &&
+      analysis.analysis &&
+      typeof analysis.analysis === "object"
+    ) {
+      analysis = analysis.analysis;
+    }
+
+    console.log("PARSED AI ANALYSIS:", analysis);
+
+    renderAnalysis(analysis);
+
+    showMessage(
+      "chartMsg",
+      data.message || "تحلیل چارت با موفقیت انجام شد.",
+      "success"
     );
 
-  } else if (direction === "SELL") {
+    await loadHistory();
 
-    directionCard.classList.add(
-      "sell"
+  } catch (error) {
+    console.error("AI ANALYSIS ERROR:", error);
+
+    showMessage(
+      "chartMsg",
+      `خطا در تحلیل: ${error.message}`,
+      "error"
     );
-
-  } else {
-
-    directionCard.classList.add(
-      "wait"
-    );
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent =
+        button.dataset.oldText || "تحلیل نمودار با هوش مصنوعی";
+    }
   }
-
-
-  $("#analysisResult")
-    .classList.remove("hidden");
 }
 
+/* =========================
+   Reset Result
+========================= */
+
+function resetAnalysisResult() {
+  const ids = [
+    "analysisDirection",
+    "analysisSymbol",
+    "analysisTimeframe",
+    "analysisEntry",
+    "analysisSL",
+    "analysisTP1",
+    "analysisTP2",
+    "analysisTP3",
+    "analysisTP4",
+    "analysisTP5",
+    "analysisConfidence",
+    "analysisTextContent",
+    "analysisWarning"
+  ];
+
+  ids.forEach((id) => {
+    const el = $(id);
+    if (el) {
+      el.textContent = "صبر کن";
+    }
+  });
+
+  const result = $("analysisResult");
+
+  if (result) {
+    result.style.display = "block";
+  }
+}
 
 /* =========================
-   ANALYSIS HISTORY
+   Render AI Result
+========================= */
+
+function renderAnalysis(analysis) {
+  if (!analysis || typeof analysis !== "object") {
+    showMessage(
+      "chartMsg",
+      "پاسخ هوش مصنوعی قابل خواندن نبود.",
+      "error"
+    );
+    return;
+  }
+
+  /*
+    DEBUG:
+    تمام کلیدهای پاسخ در Console دیده می‌شوند.
+  */
+  console.log(
+    "AI KEYS:",
+    Object.keys(analysis)
+  );
+
+  /*
+    Direction
+  */
+  const direction = getField(
+    analysis,
+    [
+      "direction",
+      "signal",
+      "trade_direction",
+      "tradeDirection",
+      "action",
+      "side"
+    ]
+  );
+
+  /*
+    Symbol
+  */
+  const symbol = getField(
+    analysis,
+    [
+      "symbol",
+      "pair",
+      "instrument"
+    ],
+    "XAUUSD"
+  );
+
+  /*
+    Timeframe
+  */
+  const timeframe = getField(
+    analysis,
+    [
+      "timeframe",
+      "time_frame",
+      "interval",
+      "chart_timeframe"
+    ]
+  );
+
+  /*
+    Entry
+  */
+  const entry = getField(
+    analysis,
+    [
+      "entry",
+      "entry_price",
+      "entryPrice",
+      "entry_point",
+      "entryPoint"
+    ]
+  );
+
+  /*
+    Stop Loss
+  */
+  const stopLoss = getField(
+    analysis,
+    [
+      "sl",
+      "stop_loss",
+      "stopLoss",
+      "stoploss"
+    ]
+  );
+
+  /*
+    Take Profits
+  */
+
+  const tp1 = getField(
+    analysis,
+    [
+      "tp1",
+      "TP1",
+      "tp_1",
+      "take_profit_1",
+      "takeProfit1"
+    ]
+  );
+
+  const tp2 = getField(
+    analysis,
+    [
+      "tp2",
+      "TP2",
+      "tp_2",
+      "take_profit_2",
+      "takeProfit2"
+    ]
+  );
+
+  const tp3 = getField(
+    analysis,
+    [
+      "tp3",
+      "TP3",
+      "tp_3",
+      "take_profit_3",
+      "takeProfit3"
+    ]
+  );
+
+  const tp4 = getField(
+    analysis,
+    [
+      "tp4",
+      "TP4",
+      "tp_4",
+      "take_profit_4",
+      "takeProfit4"
+    ]
+  );
+
+  const tp5 = getField(
+    analysis,
+    [
+      "tp5",
+      "TP5",
+      "tp_5",
+      "take_profit_5",
+      "takeProfit5"
+    ]
+  );
+
+  /*
+    Confidence
+  */
+  const confidence = getField(
+    analysis,
+    [
+      "confidence",
+      "confidence_level",
+      "confidenceLevel"
+    ],
+    "کم"
+  );
+
+  /*
+    Analysis text
+  */
+  const analysisText = getField(
+    analysis,
+    [
+      "analysis",
+      "commentary",
+      "reason",
+      "reasoning",
+      "explanation",
+      "market_analysis"
+    ],
+    ""
+  );
+
+  /*
+    Warning
+  */
+  const warning = getField(
+    analysis,
+    [
+      "warning",
+      "risk_warning",
+      "riskWarning"
+    ],
+    "بازار فارکس دارای ریسک است."
+  );
+
+  /*
+    حالا واقعاً فیلدها را داخل صفحه می‌گذاریم.
+  */
+
+  setText("analysisDirection", direction);
+  setText("analysisSymbol", symbol);
+  setText("analysisTimeframe", timeframe);
+  setText("analysisEntry", entry);
+  setText("analysisSL", stopLoss);
+
+  setText("analysisTP1", tp1);
+  setText("analysisTP2", tp2);
+  setText("analysisTP3", tp3);
+  setText("analysisTP4", tp4);
+  setText("analysisTP5", tp5);
+
+  setText("analysisConfidence", confidence);
+  setText("analysisTextContent", analysisText);
+  setText("analysisWarning", warning);
+
+  /*
+    تغییر رنگ/کلاس BUY و SELL
+  */
+  const directionCard = $("directionCard");
+
+  if (directionCard) {
+    directionCard.classList.remove(
+      "buy",
+      "sell",
+      "wait"
+    );
+
+    const normalized =
+      String(direction)
+        .toUpperCase()
+        .trim();
+
+    if (normalized.includes("BUY")) {
+      directionCard.classList.add("buy");
+    } else if (normalized.includes("SELL")) {
+      directionCard.classList.add("sell");
+    } else {
+      directionCard.classList.add("wait");
+    }
+  }
+
+  const result = $("analysisResult");
+
+  if (result) {
+    result.style.display = "block";
+  }
+}
+
+/* =========================
+   Set Text
+========================= */
+
+function setText(id, value) {
+  const el = $(id);
+
+  if (!el) return;
+
+  el.textContent = textValue(value);
+}
+
+/* =========================
+   Analysis History
 ========================= */
 
 async function loadHistory() {
+  const historyContainer = $("analysisHistory");
+
+  if (!historyContainer) return;
 
   try {
-
-    const result =
-      await api(
-        "/api/analyses"
-      );
+    const data = await api("/api/analyses");
 
     const items =
-      result.analyses || [];
+      data.analyses ||
+      data.history ||
+      data.data ||
+      [];
 
-
-    if (!items.length) {
-
-      $("#historyPanel")
-        .classList.add("hidden");
-
+    if (!Array.isArray(items) || items.length === 0) {
+      historyContainer.innerHTML =
+        "<p>هنوز تحلیل ذخیره‌شده‌ای وجود ندارد.</p>";
       return;
     }
 
+    historyContainer.innerHTML = items
+      .map((item) => {
+        let analysis = item.analysis || item.result || item;
 
-    $("#historyPanel")
-      .classList.remove("hidden");
+        if (typeof analysis === "string") {
+          try {
+            analysis = JSON.parse(analysis);
+          } catch (_) {
+            analysis = {};
+          }
+        }
 
+        const direction = getField(
+          analysis,
+          [
+            "direction",
+            "signal",
+            "trade_direction",
+            "action",
+            "side"
+          ],
+          "WAIT"
+        );
 
-    $("#analysisHistory").innerHTML =
-      items.map(item => {
+        const entry = getField(
+          analysis,
+          [
+            "entry",
+            "entry_price",
+            "entryPrice"
+          ]
+        );
 
-        const direction =
-          escapeHtml(
-            item.direction || "WAIT"
-          );
+        const sl = getField(
+          analysis,
+          [
+            "sl",
+            "stop_loss",
+            "stopLoss"
+          ]
+        );
+
+        const tp1 = getField(
+          analysis,
+          [
+            "tp1",
+            "TP1",
+            "take_profit_1"
+          ]
+        );
+
+        const tp2 = getField(
+          analysis,
+          [
+            "tp2",
+            "TP2",
+            "take_profit_2"
+          ]
+        );
+
+        const tp3 = getField(
+          analysis,
+          [
+            "tp3",
+            "TP3",
+            "take_profit_3"
+          ]
+        );
 
         return `
-          <div class="historyItem">
-
-            <div class="historyTop">
-
-              <strong>
-                ${direction}
-              </strong>
-
-              <small>
-                ${new Date(
-                  item.createdAt
-                ).toLocaleString()}
-              </small>
-
+          <div class="history-item">
+            <div>
+              <strong>${escapeHtml(direction)}</strong>
             </div>
 
-            <div class="historyLevels">
-
-              <span>
-                Entry:
-                <b>${escapeHtml(
-                  item.entry || "WAIT"
-                )}</b>
-              </span>
-
-              <span>
-                SL:
-                <b>${escapeHtml(
-                  item.sl || "WAIT"
-                )}</b>
-              </span>
-
-              <span>
-                TP1:
-                <b>${escapeHtml(
-                  item.tp1 || "WAIT"
-                )}</b>
-              </span>
-
+            <div>
+              Entry:
+              ${escapeHtml(entry)}
             </div>
 
-            <p>
-              ${escapeHtml(
-                item.analysis || ""
-              )}
-            </p>
+            <div>
+              SL:
+              ${escapeHtml(sl)}
+            </div>
 
+            <div>
+              TP1:
+              ${escapeHtml(tp1)}
+            </div>
+
+            <div>
+              TP2:
+              ${escapeHtml(tp2)}
+            </div>
+
+            <div>
+              TP3:
+              ${escapeHtml(tp3)}
+            </div>
           </div>
         `;
-
-      }).join("");
-
+      })
+      .join("");
 
   } catch (error) {
+    console.error("HISTORY ERROR:", error);
 
-    console.error(
-      "HISTORY ERROR:",
-      error
-    );
+    historyContainer.innerHTML =
+      "<p>تاریخچه تحلیل فعلاً قابل دریافت نیست.</p>";
   }
 }
 
+/* =========================
+   Signals
+========================= */
+
+async function loadSignals() {
+  const container = $("signals");
+
+  if (!container) return;
+
+  try {
+    const data = await api("/api/signals");
+
+    const signals =
+      data.signals ||
+      data.data ||
+      [];
+
+    if (!Array.isArray(signals) || signals.length === 0) {
+      container.innerHTML =
+        "<p>هنوز سیگنالی منتشر نشده است.</p>";
+      return;
+    }
+
+    container.innerHTML = signals
+      .map((signal) => `
+        <div class="signal-item">
+          <h3>
+            ${escapeHtml(signal.title || "XAUUSD Signal")}
+          </h3>
+
+          <p>
+            ${escapeHtml(signal.content || "")}
+          </p>
+        </div>
+      `)
+      .join("");
+
+  } catch (error) {
+    console.error("SIGNALS ERROR:", error);
+
+    container.innerHTML =
+      "<p>سیگنال‌ها فعلاً قابل دریافت نیستند.</p>";
+  }
+}
 
 /* =========================
-   LOAD DASHBOARD
+   Main Load
 ========================= */
 
 async function load() {
-
   try {
+    const data = await api("/api/me");
 
-    const me =
-      await api(
-        "/api/me"
-      );
+    currentUser = data.user || null;
 
+    const authSection = $("authSection");
+    const dashboard = $("dashboard");
 
-    $("#auth")
-      .classList.toggle(
-        "hidden",
-        me.loggedIn
-      );
-
-
-    $("#dashboard")
-      .classList.toggle(
-        "hidden",
-        !me.loggedIn
-      );
-
-
-    if (!me.loggedIn) {
-
-      $("#aiPanel")
-        .classList.add("hidden");
-
-      $("#historyPanel")
-        .classList.add("hidden");
-
+    if (!currentUser) {
+      if (authSection) authSection.style.display = "";
+      if (dashboard) dashboard.style.display = "none";
       return;
     }
 
+    if (authSection) authSection.style.display = "none";
+    if (dashboard) dashboard.style.display = "block";
 
-    const access =
-      await api(
-        "/api/access"
-      );
+    /*
+      نام کاربر
+    */
+    const nameElements = [
+      "userName",
+      "welcomeName",
+      "profileName"
+    ];
 
+    nameElements.forEach((id) => {
+      const el = $(id);
 
-    if (access.approved) {
-
-      $("#status").innerHTML =
-        `
-          <span class="statusApproved">
-            ✓ Your access is approved.
-          </span>
-        `;
-
-      $("#payPanel")
-        .classList.add("hidden");
-
-      $("#aiPanel")
-        .classList.remove("hidden");
-
-      await loadHistory();
-
-
-      /* ADMIN SIGNALS */
-
-      $("#signalsPanel")
-        .classList.remove("hidden");
-
-
-      if (
-        access.signals &&
-        access.signals.length
-      ) {
-
-        $("#signals").innerHTML =
-          access.signals
-            .map(signal => {
-
-              return `
-                <div class="signal">
-
-                  <div class="signalTitle">
-                    ${escapeHtml(
-                      signal.title
-                    )}
-                  </div>
-
-                  <div>
-                    ${escapeHtml(
-                      signal.body
-                    )}
-                  </div>
-
-                  <small>
-                    ${new Date(
-                      signal.createdAt
-                    ).toLocaleString()}
-                  </small>
-
-                </div>
-              `;
-
-            })
-            .join("");
-
-      } else {
-
-        $("#signals").innerHTML = `
-          <div class="empty">
-            No manual signals published yet.
-          </div>
-        `;
+      if (el && currentUser.name) {
+        el.textContent = currentUser.name;
       }
+    });
 
+    /*
+      وضعیت پرداخت
+    */
+    const status =
+      currentUser.payment_status ||
+      currentUser.paymentStatus ||
+      currentUser.status ||
+      "";
 
+    const approved =
+      status === "approved" ||
+      currentUser.approved === true ||
+      currentUser.isApproved === true;
+
+    /*
+      پنل AI فقط برای کاربر تأییدشده
+    */
+    const aiPanel = $("aiPanel");
+    const historyPanel = $("historyPanel");
+    const signalsPanel = $("signalsPanel");
+
+    if (approved) {
+      if (aiPanel) aiPanel.style.display = "block";
+      if (historyPanel) historyPanel.style.display = "block";
+      if (signalsPanel) signalsPanel.style.display = "block";
+
+      await Promise.all([
+        loadHistory(),
+        loadSignals()
+      ]);
     } else {
-
-      $("#status").innerHTML =
-        `
-          <span class="statusLocked">
-            🔒 Your access is locked until your payment receipt is reviewed.
-          </span>
-        `;
-
-      $("#payPanel")
-        .classList.remove("hidden");
-
-      $("#aiPanel")
-        .classList.add("hidden");
-
-      $("#historyPanel")
-        .classList.add("hidden");
-
-      $("#signalsPanel")
-        .classList.add("hidden");
+      if (aiPanel) aiPanel.style.display = "none";
+      if (historyPanel) historyPanel.style.display = "none";
     }
 
   } catch (error) {
-
-    console.error(
-      "LOAD ERROR:",
-      error
-    );
+    console.error("LOAD ERROR:", error);
   }
 }
 
-
 /* =========================
-   ESCAPE HTML
+   HTML Escape
 ========================= */
 
 function escapeHtml(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
 
   return String(value)
-    .replace(
-      /[&<>"']/g,
-      character =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        })[character]
-    );
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-
 /* =========================
-   START
+   Event Listeners
 ========================= */
 
-load();
+document.addEventListener("DOMContentLoaded", () => {
+
+  /*
+    Register
+  */
+  const registerForm = $("registerForm");
+
+  if (registerForm) {
+    registerForm.addEventListener(
+      "submit",
+      registerUser
+    );
+  }
+
+  /*
+    Login
+  */
+  const loginForm = $("loginForm");
+
+  if (loginForm) {
+    loginForm.addEventListener(
+      "submit",
+      loginUser
+    );
+  }
+
+  /*
+    Logout
+  */
+  const logoutBtn = $("logoutBtn");
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener(
+      "click",
+      logoutUser
+    );
+  }
+
+  /*
+    Payment
+  */
+  const paymentForm = $("paymentForm");
+
+  if (paymentForm) {
+    paymentForm.addEventListener(
+      "submit",
+      submitPayment
+    );
+  }
+
+  /*
+    Support
+  */
+  const supportForm = $("supportForm");
+
+  if (supportForm) {
+    supportForm.addEventListener(
+      "submit",
+      sendSupport
+    );
+  }
+
+  /*
+    Chart file
+  */
+  const chartFile = $("chartFile");
+
+  if (chartFile) {
+    chartFile.addEventListener(
+      "change",
+      previewChart
+    );
+  }
+
+  /*
+    Chart analysis
+  */
+  const chartForm = $("chartForm");
+
+  if (chartForm) {
+    chartForm.addEventListener(
+      "submit",
+      analyzeChart
+    );
+  }
+
+  /*
+    Initial load
+  */
+  load();
+});
