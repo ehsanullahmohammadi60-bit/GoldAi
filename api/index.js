@@ -371,7 +371,15 @@ const upload = multer({
         file.mimetype
       );
 
-    cb(null, allowed);
+    if (!allowed) {
+      return cb(
+        new Error(
+          "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
+        )
+      );
+    }
+
+    cb(null, true);
   }
 });
 
@@ -839,7 +847,8 @@ app.post(
 
       if (!req.file) {
         return res.status(400).json({
-          error: "Please upload a chart image."
+          error:
+            "Please upload a chart image."
         });
       }
 
@@ -854,25 +863,35 @@ You are GoldAI, an XAUUSD chart-analysis assistant.
 
 Analyze the uploaded trading chart image carefully.
 
-PRIMARY OBJECTIVE:
-Give a structured technical analysis of the visible XAUUSD chart.
+Your job is to analyze ONLY what is visible in the uploaded image.
 
-IMPORTANT:
-- Analyze only what is visible in the uploaded image.
-- Do not invent a current market price.
-- Do not claim certainty.
-- Do not guarantee profit.
-- Do not force a BUY or SELL.
-- If the chart is unclear, unreadable, not XAUUSD, or does not provide enough information, return WAIT.
-- If the chart shows enough information, determine BUY or SELL based on visible technical structure.
-- Identify the timeframe if visible.
-- Use visible price levels.
-- Consider trend, market structure, support, resistance, liquidity areas, candlestick behavior, breakouts/rejections and momentum when visible.
-- Entry can be a single price or a price zone.
-- TP levels must be technically reasonable relative to the visible structure.
-- SL should be beyond a relevant invalidation area when the chart provides enough information.
-- If a TP or SL cannot be reasonably determined from the image, return WAIT for that field.
-- Never fabricate numbers.
+IMPORTANT RULES:
+
+1. Do not invent prices.
+2. Do not invent a timeframe.
+3. Do not claim certainty.
+4. Do not guarantee profit.
+5. Do not force BUY or SELL.
+6. If the chart is unclear, return WAIT.
+7. If the chart is not clearly XAUUSD, return WAIT.
+8. Use only price levels that are visible or reasonably readable from the chart.
+9. Consider visible:
+   - market trend
+   - market structure
+   - support
+   - resistance
+   - liquidity
+   - candlestick behavior
+   - breakouts
+   - rejections
+   - momentum
+   - visible price zones
+10. Entry must be based on visible information.
+11. TP levels must be technically reasonable.
+12. SL must be based on a visible invalidation area when possible.
+13. If a reliable entry, TP or SL cannot be determined, use WAIT for that field.
+14. A WAIT decision is acceptable and preferred over fabricated information.
+15. Keep the analysis concise but useful.
 
 RETURN ONLY VALID JSON.
 
@@ -894,13 +913,37 @@ Use exactly this structure:
   "warning": "string"
 }
 
-For WAIT:
-- direction must be WAIT
-- entry and TP/SL fields may be WAIT
-- clearly explain why a clear setup was not identified.
+If there is not enough information for a valid trade setup:
 
-Keep the analysis concise but useful.
+{
+  "symbol": "XAUUSD",
+  "timeframe": "WAIT",
+  "direction": "WAIT",
+  "entry": "WAIT",
+  "tp1": "WAIT",
+  "tp2": "WAIT",
+  "tp3": "WAIT",
+  "tp4": "WAIT",
+  "tp5": "WAIT",
+  "sl": "WAIT",
+  "confidence": "Low",
+  "analysis": "The chart does not provide enough clear information for a reliable setup.",
+  "warning": "This is technical analysis only and does not guarantee profit."
+}
+
+Do not include Markdown.
+Do not include code fences.
+Return JSON only.
 `;
+
+      console.log(
+        "AI REQUEST:",
+        JSON.stringify({
+          model: AI_MODEL,
+          mime: req.file.mimetype,
+          size: req.file.size
+        })
+      );
 
       const openaiResponse = await fetch(
         "https://api.openai.com/v1/responses",
@@ -928,7 +971,8 @@ Keep the analysis concise but useful.
 
                   {
                     type: "input_image",
-                    image_url: imageDataUrl
+                    image_url: imageDataUrl,
+                    detail: "high"
                   }
                 ]
               }
@@ -940,6 +984,18 @@ Keep the analysis concise but useful.
       const data =
         await openaiResponse.json();
 
+      console.log(
+        "OPENAI STATUS:",
+        openaiResponse.status
+      );
+
+      /*
+       * If OpenAI returns an error,
+       * expose the actual message so we can
+       * diagnose the problem instead of
+       * showing "empty response".
+       */
+
       if (!openaiResponse.ok) {
         console.error(
           "OPENAI ERROR:",
@@ -948,120 +1004,358 @@ Keep the analysis concise but useful.
 
         return res.status(502).json({
           error:
-            "The AI service could not analyze this image."
+            data?.error?.message ||
+            data?.error?.code ||
+            "The AI service returned an error."
         });
       }
 
-      const output =
-        String(data.output_text || "").trim();
+      /*
+       * Responses API may provide convenient
+       * output_text.
+       */
+
+      let output = "";
+
+      if (
+        typeof data.output_text === "string"
+      ) {
+        output =
+          data.output_text.trim();
+      }
+
+      /*
+       * If output_text is empty,
+       * inspect the complete output array.
+       */
+
+      if (
+        !output &&
+        Array.isArray(data.output)
+      ) {
+        const textParts = [];
+
+        for (
+          const item of data.output
+        ) {
+          if (!item) continue;
+
+          if (
+            Array.isArray(item.content)
+          ) {
+            for (
+              const part of item.content
+            ) {
+              if (
+                part &&
+                typeof part.text === "string"
+              ) {
+                textParts.push(
+                  part.text
+                );
+              }
+            }
+          }
+        }
+
+        output =
+          textParts.join("\n").trim();
+      }
+
+      /*
+       * Extra fallback for unusual
+       * Responses API structures.
+       */
+
+      if (
+        !output &&
+        Array.isArray(data.output)
+      ) {
+        try {
+          const serialized =
+            JSON.stringify(data.output);
+
+          if (
+            serialized &&
+            serialized !== "[]"
+          ) {
+            const textMatches =
+              serialized.match(
+                /"text"\s*:\s*"([^"]*)"/g
+              );
+
+            if (textMatches) {
+              output =
+                textMatches
+                  .map(x =>
+                    x
+                      .replace(
+                        /^"text"\s*:\s*"/,
+                        ""
+                      )
+                      .replace(
+                        /"$/,
+                        ""
+                      )
+                  )
+                  .join("\n")
+                  .trim();
+            }
+          }
+        } catch {}
+      }
+
+      console.log(
+        "AI OUTPUT LENGTH:",
+        output.length
+      );
+
+      console.log(
+        "AI OUTPUT:",
+        output
+      );
+
+      /*
+       * If there is still no text,
+       * return diagnostic information.
+       */
 
       if (!output) {
+        console.error(
+          "EMPTY OPENAI RESPONSE:",
+          JSON.stringify(data)
+        );
+
         return res.status(502).json({
           error:
-            "The AI returned an empty response."
+            "The AI returned no readable text. Please try again with a clearer chart image."
         });
       }
 
-      let analysis;
+      /*
+       * Remove Markdown code fences if the
+       * model accidentally includes them.
+       */
+
+      let cleaned =
+        output
+          .replace(
+            /^```json\s*/i,
+            ""
+          )
+          .replace(
+            /^```\s*/i,
+            ""
+          )
+          .replace(
+            /\s*```$/i,
+            ""
+          )
+          .trim();
+
+      let analysis = null;
+
+      /*
+       * Attempt 1:
+       * direct JSON parsing.
+       */
 
       try {
-        analysis = JSON.parse(output);
-      } catch {
-        const cleaned =
-          output
-            .replace(/^```json/i, "")
-            .replace(/^```/i, "")
-            .replace(/```$/i, "")
-            .trim();
+        analysis =
+          JSON.parse(cleaned);
+      } catch {}
 
-        try {
-          analysis = JSON.parse(cleaned);
-        } catch {
-          const match =
-            cleaned.match(/\{[\s\S]*\}/);
+      /*
+       * Attempt 2:
+       * find the first { and last }.
+       */
 
-          if (!match) {
-            console.error(
-              "INVALID AI OUTPUT:",
-              output
+      if (!analysis) {
+        const start =
+          cleaned.indexOf("{");
+
+        const end =
+          cleaned.lastIndexOf("}");
+
+        if (
+          start !== -1 &&
+          end !== -1 &&
+          end > start
+        ) {
+          const possibleJson =
+            cleaned.substring(
+              start,
+              end + 1
             );
 
-            return res.status(502).json({
-              error:
-                "The AI returned an invalid analysis."
-            });
-          }
-
           try {
-            analysis = JSON.parse(match[0]);
-          } catch {
-            return res.status(502).json({
-              error:
-                "The AI returned an invalid analysis."
-            });
-          }
+            analysis =
+              JSON.parse(
+                possibleJson
+              );
+          } catch {}
         }
       }
 
-      const clean = value =>
-        value === undefined ||
-        value === null ||
-        String(value).trim() === ""
-          ? "WAIT"
-          : String(value).trim().slice(0, 2000);
+      /*
+       * If JSON parsing failed,
+       * tell the frontend what happened.
+       */
 
-      const direction =
-        ["BUY", "SELL", "WAIT"].includes(
-          String(analysis.direction).toUpperCase()
+      if (!analysis) {
+        console.error(
+          "INVALID AI JSON:",
+          cleaned
+        );
+
+        return res.status(502).json({
+          error:
+            "The AI returned an unreadable analysis. Please try again."
+        });
+      }
+
+      /*
+       * Safe field cleaner.
+       */
+
+      const clean = (
+        value,
+        fallback = "WAIT"
+      ) => {
+        if (
+          value === undefined ||
+          value === null
+        ) {
+          return fallback;
+        }
+
+        const text =
+          String(value).trim();
+
+        if (!text) {
+          return fallback;
+        }
+
+        return text.slice(
+          0,
+          2000
+        );
+      };
+
+      /*
+       * Direction validation.
+       */
+
+      let direction =
+        String(
+          analysis.direction ||
+          "WAIT"
         )
-          ? String(analysis.direction).toUpperCase()
-          : "WAIT";
+          .trim()
+          .toUpperCase();
+
+      if (
+        ![
+          "BUY",
+          "SELL",
+          "WAIT"
+        ].includes(direction)
+      ) {
+        direction = "WAIT";
+      }
+
+      /*
+       * Confidence validation.
+       */
+
+      let confidence =
+        String(
+          analysis.confidence ||
+          "Low"
+        ).trim();
+
+      if (
+        ![
+          "Low",
+          "Medium",
+          "High"
+        ].includes(confidence)
+      ) {
+        confidence = "Low";
+      }
+
+      /*
+       * Final normalized result.
+       */
 
       const result = {
-        symbol: "XAUUSD",
+        symbol:
+          clean(
+            analysis.symbol ||
+            "XAUUSD",
+            "XAUUSD"
+          ),
 
         timeframe:
-          clean(analysis.timeframe),
+          clean(
+            analysis.timeframe
+          ),
 
         direction,
 
         entry:
-          clean(analysis.entry),
+          clean(
+            analysis.entry
+          ),
 
         tp1:
-          clean(analysis.tp1),
+          clean(
+            analysis.tp1
+          ),
 
         tp2:
-          clean(analysis.tp2),
+          clean(
+            analysis.tp2
+          ),
 
         tp3:
-          clean(analysis.tp3),
+          clean(
+            analysis.tp3
+          ),
 
         tp4:
-          clean(analysis.tp4),
+          clean(
+            analysis.tp4
+          ),
 
         tp5:
-          clean(analysis.tp5),
+          clean(
+            analysis.tp5
+          ),
 
         sl:
-          clean(analysis.sl),
+          clean(
+            analysis.sl
+          ),
 
-        confidence:
-          ["Low", "Medium", "High"].includes(
-            analysis.confidence
-          )
-            ? analysis.confidence
-            : "Low",
+        confidence,
 
         analysis:
-          clean(analysis.analysis),
+          clean(
+            analysis.analysis,
+            "No detailed analysis was returned."
+          ),
 
         warning:
           clean(
-            analysis.warning ||
+            analysis.warning,
             "Trading involves market risk. This analysis does not guarantee profit."
           )
       };
+
+      /*
+       * Store the analysis in Neon.
+       */
 
       await sql`
         INSERT INTO analyses (
@@ -1100,6 +1394,10 @@ Keep the analysis concise but useful.
         )
       `;
 
+      /*
+       * Send the final result to the website.
+       */
+
       return res.json({
         ok: true,
         analysis: result
@@ -1113,6 +1411,7 @@ Keep the analysis concise but useful.
 
       return res.status(500).json({
         error:
+          error?.message ||
           "Could not analyze the chart."
       });
     }
@@ -1180,7 +1479,9 @@ app.post(
     const password =
       String(req.body?.password || "");
 
-    if (password !== ADMIN_PASSWORD) {
+    if (
+      password !== ADMIN_PASSWORD
+    ) {
       return res.status(401).json({
         error:
           "Invalid admin password."
@@ -1189,7 +1490,10 @@ app.post(
 
     setSessionCookie(
       res,
-      createToken("admin", "admin")
+      createToken(
+        "admin",
+        "admin"
+      )
     );
 
     res.json({
@@ -1266,49 +1570,99 @@ app.get(
       `;
 
       res.json({
-        users: users.map(formatUser),
+        users:
+          users.map(formatUser),
 
-        payments: payments.map(p => ({
-          ...formatPayment(p),
-          userEmail:
-            p.user_email || "Unknown",
-          userName:
-            p.user_name || "Unknown"
-        })),
+        payments:
+          payments.map(p => ({
+            ...formatPayment(p),
+
+            userEmail:
+              p.user_email ||
+              "Unknown",
+
+            userName:
+              p.user_name ||
+              "Unknown"
+          })),
 
         signals,
 
-        support: support.map(s => ({
-          id: s.id,
-          userId: s.user_id,
-          message: s.message,
-          createdAt: s.created_at,
-          userEmail:
-            s.user_email || "Unknown"
-        })),
+        support:
+          support.map(s => ({
+            id: s.id,
 
-        analyses: analyses.map(a => ({
-          id: a.id,
-          userId: a.user_id,
-          userEmail:
-            a.user_email || "Unknown",
-          userName:
-            a.user_name || "Unknown",
-          symbol: a.symbol,
-          timeframe: a.timeframe,
-          direction: a.direction,
-          entry: a.entry,
-          tp1: a.tp1,
-          tp2: a.tp2,
-          tp3: a.tp3,
-          tp4: a.tp4,
-          tp5: a.tp5,
-          sl: a.sl,
-          confidence: a.confidence,
-          analysis: a.analysis,
-          warning: a.warning,
-          createdAt: a.created_at
-        }))
+            userId:
+              s.user_id,
+
+            message:
+              s.message,
+
+            createdAt:
+              s.created_at,
+
+            userEmail:
+              s.user_email ||
+              "Unknown"
+          })),
+
+        analyses:
+          analyses.map(a => ({
+            id: a.id,
+
+            userId:
+              a.user_id,
+
+            userEmail:
+              a.user_email ||
+              "Unknown",
+
+            userName:
+              a.user_name ||
+              "Unknown",
+
+            symbol:
+              a.symbol,
+
+            timeframe:
+              a.timeframe,
+
+            direction:
+              a.direction,
+
+            entry:
+              a.entry,
+
+            tp1:
+              a.tp1,
+
+            tp2:
+              a.tp2,
+
+            tp3:
+              a.tp3,
+
+            tp4:
+              a.tp4,
+
+            tp5:
+              a.tp5,
+
+            sl:
+              a.sl,
+
+            confidence:
+              a.confidence,
+
+            analysis:
+              a.analysis,
+
+            warning:
+              a.warning,
+
+            createdAt:
+              a.created_at
+          }))
       });
 
     } catch (error) {
@@ -1363,7 +1717,9 @@ app.get(
         "private, no-store"
       );
 
-      res.send(rows[0].receipt_data);
+      res.send(
+        rows[0].receipt_data
+      );
 
     } catch (error) {
       console.error(
@@ -1394,13 +1750,17 @@ app.post(
         LIMIT 1
       `;
 
-      if (!paymentRows.length) {
+      if (
+        !paymentRows.length
+      ) {
         return res.status(404).json({
-          error: "Payment not found."
+          error:
+            "Payment not found."
         });
       }
 
-      const payment = paymentRows[0];
+      const payment =
+        paymentRows[0];
 
       await sql`
         UPDATE payments
@@ -1450,13 +1810,17 @@ app.post(
         LIMIT 1
       `;
 
-      if (!paymentRows.length) {
+      if (
+        !paymentRows.length
+      ) {
         return res.status(404).json({
-          error: "Payment not found."
+          error:
+            "Payment not found."
         });
       }
 
-      const payment = paymentRows[0];
+      const payment =
+        paymentRows[0];
 
       await sql`
         UPDATE payments
@@ -1520,9 +1884,12 @@ app.post(
         VALUES (
           ${createId()},
           ${String(
-            title || "XAUUSD Signal"
+            title ||
+            "XAUUSD Signal"
           ).slice(0, 120)},
-          ${String(body).slice(0, 5000)}
+          ${String(
+            body
+          ).slice(0, 5000)}
         )
       `;
 
@@ -1573,6 +1940,53 @@ app.delete(
           "Could not delete signal."
       });
     }
+  }
+);
+
+/* =========================
+   MULTER ERROR HANDLER
+========================= */
+
+app.use(
+  (error, req, res, next) => {
+    if (
+      error &&
+      error.code === "LIMIT_FILE_SIZE"
+    ) {
+      return res.status(400).json({
+        error:
+          "The image is too large. Maximum size is 5 MB."
+      });
+    }
+
+    if (
+      error &&
+      error.message
+    ) {
+      return res.status(400).json({
+        error: error.message
+      });
+    }
+
+    next(error);
+  }
+);
+
+/* =========================
+   FINAL ERROR HANDLER
+========================= */
+
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      "UNHANDLED ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      error:
+        "Internal server error."
+    });
   }
 );
 
