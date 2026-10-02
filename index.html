@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
+
 <head>
+
   <meta charset="utf-8">
 
   <meta
@@ -15,9 +17,23 @@
     content="GoldAI - تحلیل هوشمند نمودار XAUUSD و دسترسی اعضا"
   >
 
-  <link rel="stylesheet" href="styles.css">
+  <meta
+    name="theme-color"
+    content="#070a0f"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://s3.tradingview.com"
+  >
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  >
 
   <style>
+
     html[dir="rtl"] body {
       direction: rtl;
       text-align: right;
@@ -127,10 +143,24 @@
       opacity: 0.6;
       cursor: not-allowed;
     }
+
+    .payment-id {
+      display: inline-block;
+      direction: ltr;
+      unicode-bidi: plaintext;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      margin: 4px 0;
+    }
+
   </style>
+
 </head>
 
+
 <body>
+
 
 <header class="topbar">
 
@@ -138,20 +168,33 @@
     Gold<span>AI</span>
   </div>
 
+
   <select
     id="lang"
     class="languageSelect"
     aria-label="Language"
   >
-    <option value="fa">فارسی</option>
-    <option value="en">English</option>
-    <option value="ar">العربية</option>
+
+    <option value="fa">
+      فارسی
+    </option>
+
+    <option value="en">
+      English
+    </option>
+
+    <option value="ar">
+      العربية
+    </option>
+
   </select>
 
 </header>
 
 
+
 <main>
+
 
   <!-- =====================================================
        HERO
@@ -166,12 +209,14 @@
       XAUUSD • تحلیل هوشمند نمودار
     </div>
 
+
     <h1
       id="heroTitle"
       data-i18n="heroTitle"
     >
       تحلیل حرفه‌ای طلا
     </h1>
+
 
     <p
       id="heroText"
@@ -180,37 +225,230 @@
       نمودار XAUUSD خود را آپلود کنید تا GoldAI ساختار قابل مشاهده بازار را تحلیل کند.
     </p>
 
+
     <div class="grid">
 
       <div class="card">
-        <b>240 AFN</b>
+
+        <b>
+          240 AFN
+        </b>
 
         <small data-i18n="hesabpayActivation">
           فعال‌سازی با حساب‌پی
         </small>
+
       </div>
 
 
       <div class="card">
-        <b>4 USD / USDT</b>
+
+        <b>
+          4 USD / USDT
+        </b>
 
         <small data-i18n="binanceActivation">
           فعال‌سازی با Binance Pay
         </small>
+
       </div>
 
 
       <div class="card">
-        <b>AI Vision</b>
+
+        <b>
+          AI Vision
+        </b>
 
         <small data-i18n="chartImageAnalysis">
           تحلیل تصویر نمودار
         </small>
+
       </div>
 
     </div>
 
   </section>
+
+
+
+  <!-- =====================================================
+       LIVE GOLD CHART
+  ====================================================== -->
+
+  <section
+    id="liveMarket"
+    class="liveMarket panel"
+  >
+
+    <div class="liveMarketHeader">
+
+      <div>
+
+        <div
+          class="miniLabel"
+          data-i18n="liveGold"
+        >
+          LIVE GOLD MARKET
+        </div>
+
+
+        <h2 data-i18n="liveGoldTitle">
+          نمودار زنده طلا — XAUUSD
+        </h2>
+
+
+        <p
+          class="muted"
+          data-i18n="liveGoldText"
+        >
+          قیمت و نمودار XAUUSD به‌صورت زنده از TradingView نمایش داده می‌شود.
+        </p>
+
+      </div>
+
+
+      <div class="liveIndicator">
+
+        <span class="liveDot"></span>
+
+        <span data-i18n="live">
+          LIVE
+        </span>
+
+      </div>
+
+    </div>
+
+
+    <div class="liveChartShell">
+
+
+      <div
+        class="liveChartLoading"
+        id="liveChartLoading"
+      >
+
+        <div class="chartSpinner"></div>
+
+        <span data-i18n="loadingLiveChart">
+          در حال بارگذاری نمودار زنده...
+        </span>
+
+      </div>
+
+
+
+      <div class="tradingview-widget-container liveChartWidget">
+
+        <div class="tradingview-widget-container__widget"></div>
+
+
+        <div class="tradingview-widget-copyright">
+
+          <a
+            href="https://www.tradingview.com/symbols/XAUUSD/"
+            target="_blank"
+            rel="noopener nofollow"
+          >
+            <span class="blue-text">
+              XAUUSD chart
+            </span>
+          </a>
+
+          <span class="trademark">
+            by TradingView
+          </span>
+
+        </div>
+
+
+        <script
+          type="text/javascript"
+          src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
+          async
+        >
+        {
+          "autosize": true,
+          "symbol": "OANDA:XAUUSD",
+          "interval": "15",
+          "timezone": "exchange",
+          "theme": "dark",
+          "style": "1",
+          "locale": "en",
+          "backgroundColor": "rgba(8,13,19,1)",
+          "gridColor": "rgba(75,85,99,0.12)",
+          "hide_top_toolbar": false,
+          "hide_side_toolbar": true,
+          "hide_legend": false,
+          "hide_volume": true,
+          "allow_symbol_change": false,
+          "withdateranges": true,
+          "save_image": true,
+          "calendar": false,
+          "details": false,
+          "hotlist": false,
+          "support_host": "https://www.tradingview.com",
+          "studies": [
+            "MASimple@tv-basicstudies",
+            "RSI@tv-basicstudies"
+          ]
+        }
+        </script>
+
+      </div>
+
+
+
+      <div
+        class="chartFallback"
+        id="chartFallback"
+      >
+
+        <div class="fallbackIcon">
+          ◈
+        </div>
+
+
+        <strong data-i18n="chartFallbackTitle">
+          نمودار زنده موقتاً در دسترس نیست
+        </strong>
+
+
+        <span data-i18n="chartFallbackText">
+          اتصال نمودار زنده برقرار نشد. صفحه را دوباره بارگذاری کنید.
+        </span>
+
+
+        <button
+          type="button"
+          class="ghost"
+          onclick="window.location.reload()"
+          data-i18n="reloadChart"
+        >
+          بارگذاری دوباره
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <div class="liveMarketFooter">
+
+      <span data-i18n="chartSource">
+        منبع نمودار: TradingView
+      </span>
+
+
+      <span data-i18n="chartNote">
+        قیمت‌ها ممکن است بین بروکرها و منابع داده کمی تفاوت داشته باشند.
+      </span>
+
+    </div>
+
+  </section>
+
 
 
   <!-- =====================================================
@@ -246,6 +484,7 @@
     </div>
 
 
+
     <!-- LOGIN -->
 
     <form id="loginForm">
@@ -278,6 +517,7 @@
       </button>
 
     </form>
+
 
 
     <!-- REGISTER -->
@@ -335,6 +575,7 @@
   </section>
 
 
+
   <!-- =====================================================
        DASHBOARD
   ====================================================== -->
@@ -343,6 +584,7 @@
     id="dashboard"
     class="hidden"
   >
+
 
     <!-- MEMBER HEADER -->
 
@@ -384,6 +626,7 @@
     </div>
 
 
+
     <!-- ===================================================
          PAYMENT / ACCESS ACTIVATION
     ==================================================== -->
@@ -420,16 +663,12 @@
       </p>
 
 
-      <!-- PAYMENT STATUS -->
-
       <div
         id="paymentStatus"
         class="accessStatus pending"
       >
       </div>
 
-
-      <!-- PAYMENT METHODS -->
 
       <div
         id="paymentMethods"
@@ -472,15 +711,11 @@
       </div>
 
 
-      <!-- PAYMENT DETAILS -->
-
       <div
         id="payDetails"
         class="details"
       ></div>
 
-
-      <!-- PAYMENT FORM -->
 
       <form id="paymentForm">
 
@@ -527,6 +762,7 @@
     </div>
 
 
+
     <!-- ===================================================
          APPROVED ACCOUNT NOTICE
     ==================================================== -->
@@ -537,14 +773,18 @@
     >
 
       <strong>
+
         <span data-i18n="goldAiMember">
           عضو GOLD AI
         </span>
+
       </strong>
+
 
       <p id="approvedNoticeText"></p>
 
     </div>
+
 
 
     <!-- ===================================================
@@ -588,6 +828,7 @@
       >
         ابتدا تایم‌فریم مورد نظر را انتخاب کنید، سپس یک اسکرین‌شات واضح از نمودار XAUUSD همان تایم‌فریم آپلود کنید.
       </p>
+
 
 
       <!-- TIMEFRAME -->
@@ -669,6 +910,7 @@
       </div>
 
 
+
       <!-- CHART FORM -->
 
       <form id="chartForm">
@@ -734,6 +976,7 @@
       ></p>
 
 
+
       <!-- =================================================
            AI RESULT
       ================================================== -->
@@ -763,6 +1006,7 @@
         <div class="analysisGrid">
 
           <div class="analysisBox">
+
             <small data-i18n="symbol">
               نماد
             </small>
@@ -770,10 +1014,12 @@
             <b id="analysisSymbol">
               XAUUSD
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small data-i18n="timeframe">
               تایم‌فریم
             </small>
@@ -781,10 +1027,12 @@
             <b id="analysisTimeframe">
               1M
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small data-i18n="entry">
               ورود
             </small>
@@ -792,10 +1040,12 @@
             <b id="analysisEntry">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small data-i18n="stopLoss">
               حد ضرر
             </small>
@@ -803,10 +1053,12 @@
             <b id="analysisSL">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small>
               TP1
             </small>
@@ -814,10 +1066,12 @@
             <b id="analysisTP1">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small>
               TP2
             </small>
@@ -825,10 +1079,12 @@
             <b id="analysisTP2">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small>
               TP3
             </small>
@@ -836,10 +1092,12 @@
             <b id="analysisTP3">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small>
               TP4
             </small>
@@ -847,10 +1105,12 @@
             <b id="analysisTP4">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small>
               TP5
             </small>
@@ -858,10 +1118,12 @@
             <b id="analysisTP5">
               WAIT
             </b>
+
           </div>
 
 
           <div class="analysisBox">
+
             <small data-i18n="confidence">
               میزان اطمینان
             </small>
@@ -869,9 +1131,11 @@
             <b id="analysisConfidence">
               Low
             </b>
+
           </div>
 
         </div>
+
 
 
         <!-- TECHNICAL ANALYSIS -->
@@ -885,6 +1149,7 @@
           <p id="analysisTextContent"></p>
 
         </div>
+
 
 
         <!-- RISK WARNING -->
@@ -902,6 +1167,7 @@
       </div>
 
     </div>
+
 
 
     <!-- ===================================================
@@ -939,6 +1205,7 @@
     </div>
 
 
+
     <!-- ===================================================
          PRIVATE SIGNALS
     ==================================================== -->
@@ -972,6 +1239,7 @@
       <div id="signals"></div>
 
     </div>
+
 
 
     <!-- ===================================================
@@ -1024,6 +1292,7 @@
 </main>
 
 
+
 <!-- =======================================================
      FOOTER
 ======================================================== -->
@@ -1042,7 +1311,46 @@
 </footer>
 
 
+
+<script>
+
+  window.addEventListener("load", function () {
+
+    setTimeout(function () {
+
+      var loading =
+        document.getElementById("liveChartLoading");
+
+      if (loading) {
+        loading.classList.add("hidden");
+      }
+
+    }, 4500);
+
+
+    setTimeout(function () {
+
+      var widget =
+        document.querySelector(
+          ".liveChartWidget iframe"
+        );
+
+      var fallback =
+        document.getElementById("chartFallback");
+
+      if (!widget && fallback) {
+        fallback.classList.add("visible");
+      }
+
+    }, 8000);
+
+  });
+
+</script>
+
+
 <script src="app.js"></script>
 
+
 </body>
-</html>
+  </html>
