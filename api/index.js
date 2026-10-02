@@ -656,9 +656,6 @@ const upload =
 
 /* =====================================================
    USERS ID HELPER
-   FIXES:
-   null value in column "id"
-   of relation "users"
 ===================================================== */
 
 async function getNextUserId() {
@@ -815,13 +812,6 @@ app.post(
       const passwordData =
         hashPassword(password);
 
-      /*
-       * IMPORTANT:
-       *
-       * Existing users.id has no DEFAULT.
-       * Therefore we inspect the actual database
-       * column before inserting.
-       */
       const generatedUserId =
         await getNextUserId();
 
@@ -830,9 +820,6 @@ app.post(
       if (
         generatedUserId === null
       ) {
-        /*
-         * PostgreSQL already generates the ID.
-         */
         rows =
           await sql`
             INSERT INTO users (
@@ -854,10 +841,6 @@ app.post(
             RETURNING *
           `;
       } else {
-        /*
-         * Existing legacy database:
-         * explicitly provide users.id.
-         */
         rows =
           await sql`
             INSERT INTO users (
@@ -1118,6 +1101,20 @@ app.get(
 
 /* =====================================================
    PAYMENT
+   FIX:
+   FRONTEND SENDS:
+   "hesabpay" / "binance"
+
+   BACKEND NOW ACCEPTS:
+   "hesabpay"
+   "HesabPay"
+   "hesab pay"
+   "Binance"
+   "binance"
+   "Binance Pay"
+
+   DATABASE STORES:
+   "hesabpay" OR "binance"
 ===================================================== */
 
 app.post(
@@ -1126,44 +1123,65 @@ app.post(
   upload.single("receipt"),
   async (req, res) => {
     try {
-      const method =
+      const rawMethod =
         String(
           req.body?.method || ""
-        ).trim();
+        )
+          .trim()
+          .toLowerCase();
 
-      const reference =
-        String(
-          req.body?.reference || ""
-        ).trim();
+      let method = null;
 
       if (
-        ![
-          "HesabPay",
-          "Binance Pay"
-        ].includes(method)
+        rawMethod === "hesabpay" ||
+        rawMethod === "hesab pay"
       ) {
+        method = "hesabpay";
+      } else if (
+        rawMethod === "binance" ||
+        rawMethod === "binance pay"
+      ) {
+        method = "binance";
+      }
+
+      if (!method) {
         return res.status(400).json({
           error:
             "Invalid payment method."
         });
       }
 
+      const reference =
+        String(
+          req.body?.reference || ""
+        ).trim();
+
+      if (!reference) {
+        return res.status(400).json({
+          error:
+            "Payment reference is required."
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          error:
+            "Receipt image is required."
+        });
+      }
+
       const amount =
-        method === "HesabPay"
+        method === "hesabpay"
           ? 240
           : 4;
 
       const receiptData =
-        req.file
-          ? req.file.buffer.toString(
-              "base64"
-            )
-          : null;
+        req.file.buffer.toString(
+          "base64"
+        );
 
       const receiptMime =
-        req.file
-          ? req.file.mimetype
-          : null;
+        req.file.mimetype;
 
       const rows =
         await sql`
@@ -1200,6 +1218,11 @@ app.post(
           rows[0]
       });
     } catch (error) {
+      console.error(
+        "PAYMENT ERROR:",
+        error
+      );
+
       res.status(500).json({
         error:
           error?.message ||
