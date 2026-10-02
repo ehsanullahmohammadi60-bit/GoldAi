@@ -1,19 +1,635 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GoldAI — XAUUSD Signals</title><link rel="stylesheet" href="styles.css"></head>
-<body><header><div class="brand">Gold<span>AI</span></div><select id="lang"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option></select></header>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  >
+
+  <title>GoldAI — XAUUSD AI Analyzer</title>
+
+  <meta
+    name="description"
+    content="GoldAI XAUUSD AI chart analysis and member access platform."
+  >
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+<header class="topbar">
+
+  <div class="brand">
+    Gold<span>AI</span>
+  </div>
+
+  <select id="lang">
+    <option value="en">English</option>
+    <option value="fa">فارسی</option>
+    <option value="ar">العربية</option>
+  </select>
+
+</header>
+
+
 <main>
-<section id="hero"><div class="pill">XAUUSD • MEMBER ACCESS</div><h1 id="heroTitle">Professional Gold Signals</h1><p id="heroText">Create your account, activate access, and receive XAUUSD signals inside your private dashboard.</p>
-<div class="grid"><div class="card"><b>240 AFN</b><small>HesabPay activation</small></div><div class="card"><b>4 USD / USDT</b><small>Binance Pay activation</small></div></div>
-</section>
-<section id="auth" class="panel"><div class="tabs"><button class="tab active" data-tab="login">Login</button><button class="tab" data-tab="register">Create account</button></div>
-<form id="loginForm"><input id="loginEmail" type="email" placeholder="Email" required><input id="loginPass" type="password" placeholder="Password" required><button>Login</button></form>
-<form id="registerForm" class="hidden"><input id="regName" placeholder="Full name" required><input id="regEmail" type="email" placeholder="Email" required><input id="regPass" type="password" placeholder="Password (6+ characters)" minlength="6" required><button>Create account</button></form><p id="authMsg" class="msg"></p></section>
-<section id="dashboard" class="hidden"><div class="panel"><div class="row"><h2>Member Dashboard</h2><button id="logout" class="ghost">Logout</button></div><p id="status"></p></div>
-<div id="payPanel" class="panel"><h2>Activate access</h2><p>Pay once, then upload your payment receipt. Your access stays locked until the administrator verifies it.</p>
-<div class="payGrid"><button class="pay active" data-method="hesabpay"><b>HesabPay</b><small>240 AFN</small></button><button class="pay" data-method="binance"><b>Binance Pay</b><small>4 USD / USDT</small></button></div>
-<div id="payDetails" class="details"></div>
-<form id="paymentForm"><input id="reference" placeholder="Transaction ID / reference" required><input id="receipt" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required><button>Submit receipt for review</button></form><p id="payMsg" class="msg"></p></div>
-<div id="signalsPanel" class="panel hidden"><h2>Private XAUUSD Signals</h2><div id="signals"></div></div>
-<div class="panel"><h2>Website Support</h2><textarea id="supportText" placeholder="Write your message..."></textarea><button id="supportBtn">Send support message</button><p id="supportMsg" class="msg"></p></div></section>
-</main><footer>GoldAI • XAUUSD analysis service • Trading involves market risk.</footer><script src="app.js"></script></body></html>
+
+  <!-- HERO -->
+
+  <section id="hero" class="hero">
+
+    <div class="pill">
+      XAUUSD • AI CHART ANALYZER
+    </div>
+
+    <h1 id="heroTitle">
+      Professional Gold Analysis
+    </h1>
+
+    <p id="heroText">
+      Upload your XAUUSD chart and let GoldAI analyze the visible market structure.
+    </p>
+
+    <div class="grid">
+
+      <div class="card">
+        <b>240 AFN</b>
+        <small>HesabPay activation</small>
+      </div>
+
+      <div class="card">
+        <b>4 USD / USDT</b>
+        <small>Binance Pay activation</small>
+      </div>
+
+      <div class="card">
+        <b>AI Vision</b>
+        <small>Chart image analysis</small>
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- AUTH -->
+
+  <section id="auth" class="panel">
+
+    <div class="tabs">
+
+      <button
+        class="tab active"
+        data-tab="login"
+      >
+        Login
+      </button>
+
+      <button
+        class="tab"
+        data-tab="register"
+      >
+        Create account
+      </button>
+
+    </div>
+
+
+    <form id="loginForm">
+
+      <input
+        id="loginEmail"
+        type="email"
+        placeholder="Email"
+        required
+      >
+
+      <input
+        id="loginPass"
+        type="password"
+        placeholder="Password"
+        required
+      >
+
+      <button type="submit">
+        Login
+      </button>
+
+    </form>
+
+
+    <form
+      id="registerForm"
+      class="hidden"
+    >
+
+      <input
+        id="regName"
+        placeholder="Full name"
+        required
+      >
+
+      <input
+        id="regEmail"
+        type="email"
+        placeholder="Email"
+        required
+      >
+
+      <input
+        id="regPass"
+        type="password"
+        placeholder="Password (6+ characters)"
+        minlength="6"
+        required
+      >
+
+      <button type="submit">
+        Create account
+      </button>
+
+    </form>
+
+
+    <p
+      id="authMsg"
+      class="msg"
+    ></p>
+
+  </section>
+
+
+  <!-- DASHBOARD -->
+
+  <section
+    id="dashboard"
+    class="hidden"
+  >
+
+
+    <!-- MEMBER HEADER -->
+
+    <div class="panel dashboardHeader">
+
+      <div class="row">
+
+        <div>
+
+          <div class="miniLabel">
+            GOLD AI MEMBER
+          </div>
+
+          <h2>
+            Member Dashboard
+          </h2>
+
+        </div>
+
+        <button
+          id="logout"
+          class="ghost"
+        >
+          Logout
+        </button>
+
+      </div>
+
+      <p id="status"></p>
+
+    </div>
+
+
+    <!-- PAYMENT -->
+
+    <div
+      id="payPanel"
+      class="panel"
+    >
+
+      <div class="sectionTitle">
+
+        <div>
+
+          <div class="miniLabel">
+            MEMBERSHIP
+          </div>
+
+          <h2>
+            Activate access
+          </h2>
+
+        </div>
+
+      </div>
+
+      <p>
+        Pay once, then upload your payment receipt.
+        Your access remains locked until an administrator
+        verifies the payment.
+      </p>
+
+
+      <div class="payGrid">
+
+        <button
+          class="pay active"
+          data-method="hesabpay"
+        >
+
+          <b>
+            HesabPay
+          </b>
+
+          <small>
+            240 AFN
+          </small>
+
+        </button>
+
+
+        <button
+          class="pay"
+          data-method="binance"
+        >
+
+          <b>
+            Binance Pay
+          </b>
+
+          <small>
+            4 USD / USDT
+          </small>
+
+        </button>
+
+      </div>
+
+
+      <div
+        id="payDetails"
+        class="details"
+      ></div>
+
+
+      <form id="paymentForm">
+
+        <input
+          id="reference"
+          placeholder="Transaction ID / reference"
+          required
+        >
+
+        <input
+          id="receipt"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          required
+        >
+
+        <button type="submit">
+          Submit receipt for review
+        </button>
+
+      </form>
+
+
+      <p
+        id="payMsg"
+        class="msg"
+      ></p>
+
+    </div>
+
+
+    <!-- AI ANALYZER -->
+
+    <div
+      id="aiPanel"
+      class="panel hidden"
+    >
+
+      <div class="sectionTitle">
+
+        <div>
+
+          <div class="miniLabel">
+            GOLD AI VISION
+          </div>
+
+          <h2>
+            XAUUSD AI Chart Analyzer
+          </h2>
+
+        </div>
+
+        <div class="aiBadge">
+          AI
+        </div>
+
+      </div>
+
+
+      <p class="muted">
+        Upload a clear screenshot of your XAUUSD chart.
+        GoldAI will analyze the visible technical structure
+        and return BUY, SELL or WAIT.
+      </p>
+
+
+      <form id="chartForm">
+
+        <label
+          for="chartFile"
+          class="uploadBox"
+        >
+
+          <div class="uploadIcon">
+            ↑
+          </div>
+
+          <strong>
+            Choose XAUUSD chart
+          </strong>
+
+          <span>
+            PNG, JPG, WEBP or GIF • Max 5 MB
+          </span>
+
+        </label>
+
+
+        <input
+          id="chartFile"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          hidden
+          required
+        >
+
+
+        <div
+          id="chartPreviewWrap"
+          class="chartPreviewWrap hidden"
+        >
+
+          <img
+            id="chartPreview"
+            alt="Chart preview"
+          >
+
+        </div>
+
+
+        <button
+          id="analyzeBtn"
+          type="submit"
+        >
+          Analyze Chart with AI
+        </button>
+
+      </form>
+
+
+      <p
+        id="chartMsg"
+        class="msg"
+      ></p>
+
+
+      <!-- RESULT -->
+
+      <div
+        id="analysisResult"
+        class="hidden"
+      >
+
+        <div
+          id="directionCard"
+          class="directionCard"
+        >
+
+          <span>
+            AI SIGNAL
+          </span>
+
+          <strong id="analysisDirection">
+            WAIT
+          </strong>
+
+        </div>
+
+
+        <div class="analysisGrid">
+
+          <div class="analysisBox">
+            <small>Symbol</small>
+            <b id="analysisSymbol">
+              XAUUSD
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>Timeframe</small>
+            <b id="analysisTimeframe">
+              Unknown
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>Entry</small>
+            <b id="analysisEntry">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>Stop Loss</small>
+            <b id="analysisSL">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP1</small>
+            <b id="analysisTP1">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP2</small>
+            <b id="analysisTP2">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP3</small>
+            <b id="analysisTP3">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP4</small>
+            <b id="analysisTP4">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP5</small>
+            <b id="analysisTP5">
+              WAIT
+            </b>
+          </div>
+
+          <div class="analysisBox">
+            <small>Confidence</small>
+            <b id="analysisConfidence">
+              Low
+            </b>
+          </div>
+
+        </div>
+
+
+        <div class="analysisText">
+
+          <h3>
+            Technical Analysis
+          </h3>
+
+          <p id="analysisTextContent">
+          </p>
+
+        </div>
+
+
+        <div class="analysisWarning">
+
+          <strong>
+            Risk Warning
+          </strong>
+
+          <p id="analysisWarning">
+          </p>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- AI HISTORY -->
+
+    <div
+      id="historyPanel"
+      class="panel hidden"
+    >
+
+      <div class="sectionTitle">
+
+        <div>
+
+          <div class="miniLabel">
+            HISTORY
+          </div>
+
+          <h2>
+            Previous AI Analyses
+          </h2>
+
+        </div>
+
+      </div>
+
+      <div id="analysisHistory">
+      </div>
+
+    </div>
+
+
+    <!-- ADMIN SIGNALS -->
+
+    <div
+      id="signalsPanel"
+      class="panel hidden"
+    >
+
+      <div class="sectionTitle">
+
+        <div>
+
+          <div class="miniLabel">
+            PRIVATE FEED
+          </div>
+
+          <h2>
+            Private XAUUSD Signals
+          </h2>
+
+        </div>
+
+      </div>
+
+      <div id="signals">
+      </div>
+
+    </div>
+
+
+    <!-- SUPPORT -->
+
+    <div class="panel">
+
+      <div class="miniLabel">
+        SUPPORT
+      </div>
+
+      <h2>
+        Website Support
+      </h2>
+
+      <textarea
+        id="supportText"
+        placeholder="Write your message..."
+      ></textarea>
+
+      <button id="supportBtn">
+        Send support message
+      </button>
+
+      <p
+        id="supportMsg"
+        class="msg"
+      ></p>
+
+    </div>
+
+
+  </section>
+
+</main>
+
+
+<footer>
+
+  <div>
+    GoldAI • XAUUSD AI analysis service
+  </div>
+
+  <small>
+    Trading involves market risk. AI analysis does not guarantee profit.
+  </small>
+
+</footer>
+
+
+<script src="app.js"></script>
+
+</body>
+</html>
