@@ -1,12 +1,458 @@
-const $ = (id) =>
-  document.getElementById(id);
+const $ = (id) => document.getElementById(id);
 
 let currentUser = null;
 let selectedChartFile = null;
-
 let selectedTimeframe = "1m";
-let selectedPaymentMethod =
-  "hesabpay";
+let selectedPaymentMethod = "hesabpay";
+
+/* =========================================================
+   TRANSLATIONS
+========================================================= */
+
+const translations = {
+
+  fa: {
+    documentTitle: "GoldAI — تحلیل هوشمند XAUUSD",
+
+    heroPill: "XAUUSD • تحلیل هوشمند نمودار",
+    heroTitle: "تحلیل حرفه‌ای طلا",
+    heroText: "نمودار XAUUSD خود را آپلود کنید تا GoldAI ساختار قابل مشاهده بازار را تحلیل کند.",
+
+    hesabpayActivation: "فعال‌سازی با حساب‌پی",
+    binanceActivation: "فعال‌سازی با Binance Pay",
+    chartImageAnalysis: "تحلیل تصویر نمودار",
+
+    login: "ورود",
+    createAccount: "ساخت حساب",
+    email: "ایمیل",
+    password: "رمز عبور",
+    fullName: "نام کامل",
+    password6: "رمز عبور (حداقل ۶ کاراکتر)",
+
+    goldAiMember: "عضو GOLD AI",
+    memberDashboard: "داشبورد اعضا",
+    logout: "خروج",
+
+    membership: "عضویت",
+    activateAccess: "فعال‌سازی دسترسی",
+    paymentDescription: "مبلغ را پرداخت کنید و سپس رسید پرداخت خود را ارسال کنید. دسترسی شما تا زمان تأیید توسط مدیر قفل خواهد بود.",
+    transactionReference: "شماره تراکنش / Reference",
+    submitReceipt: "ارسال رسید برای بررسی",
+
+    goldAiVision: "GOLD AI VISION",
+    xauusdAnalyzer: "تحلیلگر هوشمند نمودار XAUUSD",
+    analyzerDescription: "ابتدا تایم‌فریم مورد نظر را انتخاب کنید، سپس یک اسکرین‌شات واضح از نمودار XAUUSD همان تایم‌فریم آپلود کنید.",
+
+    selectTimeframe: "انتخاب تایم‌فریم تحلیل",
+    oneMinute: "۱ دقیقه",
+    fiveMinutes: "۵ دقیقه",
+    fifteenMinutes: "۱۵ دقیقه",
+
+    chooseChart: "انتخاب نمودار XAUUSD",
+    chartFormats: "PNG، JPG، WEBP یا GIF • حداکثر ۵ مگابایت",
+    analyzeChart: "تحلیل نمودار با هوش مصنوعی",
+
+    aiSignal: "سیگنال هوش مصنوعی",
+    symbol: "نماد",
+    timeframe: "تایم‌فریم",
+    entry: "ورود",
+    stopLoss: "حد ضرر",
+    confidence: "میزان اطمینان",
+
+    technicalAnalysis: "تحلیل تکنیکال",
+    riskWarning: "هشدار ریسک",
+
+    history: "تاریخچه",
+    previousAnalyses: "تحلیل‌های قبلی",
+
+    privateFeed: "فید خصوصی",
+    privateSignals: "سیگنال‌های خصوصی XAUUSD",
+
+    support: "پشتیبانی",
+    websiteSupport: "پشتیبانی سایت",
+    writeMessage: "پیام خود را بنویسید...",
+    sendSupport: "ارسال پیام پشتیبانی",
+
+    footerTitle: "GoldAI • سرویس تحلیل هوشمند XAUUSD",
+    footerWarning: "معامله‌گری دارای ریسک بازار است. تحلیل هوش مصنوعی سود را تضمین نمی‌کند.",
+
+    loading: "در حال بارگذاری...",
+    loginLoading: "در حال ورود...",
+    registerLoading: "در حال ساخت حساب...",
+    paymentLoading: "در حال ارسال رسید...",
+    supportLoading: "در حال ارسال...",
+    analysisLoading: "هوش مصنوعی در حال تحلیل چارت است...",
+
+    loginSuccess: "ورود موفق بود.",
+    registerSuccess: "حساب با موفقیت ساخته شد.",
+    paymentSuccess: "رسید ارسال شد و منتظر تأیید مدیر است.",
+    supportSuccess: "پیام شما ارسال شد.",
+    analysisSuccess: "تحلیل چارت با موفقیت انجام شد.",
+
+    fillLogin: "ایمیل و رمز عبور را وارد کنید.",
+    fillRegister: "لطفاً تمام معلومات را وارد کنید.",
+    chartRequired: "لطفاً اول عکس چارت XAUUSD را انتخاب کنید.",
+    imageOnly: "لطفاً فقط فایل تصویری چارت را انتخاب کنید.",
+    receiptRequired: "لطفاً رسید پرداخت را انتخاب کنید.",
+    referenceRequired: "لطفاً شماره یا Reference پرداخت را وارد کنید.",
+    supportRequired: "لطفاً پیام خود را بنویسید.",
+
+    invalidImageSize: "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.",
+    invalidImageType: "فرمت تصویر مجاز نیست.",
+
+    noHistory: "هنوز تحلیل ذخیره‌شده‌ای وجود ندارد.",
+    historyUnavailable: "تاریخچه تحلیل فعلاً قابل دریافت نیست.",
+    noSignals: "هنوز سیگنالی منتشر نشده است.",
+    signalsUnavailable: "سیگنال‌ها فعلاً قابل دریافت نیستند.",
+
+    notApproved: "حساب شما هنوز توسط مدیر تأیید نشده است.",
+
+    paymentHesabPay: "روش پرداخت انتخاب‌شده: HesabPay — 240 AFN",
+    paymentBinance: "روش پرداخت انتخاب‌شده: Binance Pay — 4 USD / USDT",
+
+    wait: "صبر",
+    low: "کم",
+    medium: "متوسط",
+    high: "بالا",
+
+    entryLabel: "ورود",
+    slLabel: "حد ضرر"
+  },
+
+
+  en: {
+    documentTitle: "GoldAI — XAUUSD AI Analyzer",
+
+    heroPill: "XAUUSD • AI CHART ANALYZER",
+    heroTitle: "Professional Gold Analysis",
+    heroText: "Upload your XAUUSD chart and let GoldAI analyze the visible market structure.",
+
+    hesabpayActivation: "HesabPay activation",
+    binanceActivation: "Binance Pay activation",
+    chartImageAnalysis: "Chart image analysis",
+
+    login: "Login",
+    createAccount: "Create account",
+    email: "Email",
+    password: "Password",
+    fullName: "Full name",
+    password6: "Password (6+ characters)",
+
+    goldAiMember: "GOLD AI MEMBER",
+    memberDashboard: "Member Dashboard",
+    logout: "Logout",
+
+    membership: "MEMBERSHIP",
+    activateAccess: "Activate access",
+    paymentDescription: "Pay once, then upload your payment receipt. Your access remains locked until an administrator verifies the payment.",
+    transactionReference: "Transaction ID / Reference",
+    submitReceipt: "Submit receipt for review",
+
+    goldAiVision: "GOLD AI VISION",
+    xauusdAnalyzer: "XAUUSD AI Chart Analyzer",
+    analyzerDescription: "First select the analysis timeframe, then upload a clear screenshot of your XAUUSD chart on that timeframe.",
+
+    selectTimeframe: "Select analysis timeframe",
+    oneMinute: "1 Minute",
+    fiveMinutes: "5 Minutes",
+    fifteenMinutes: "15 Minutes",
+
+    chooseChart: "Choose XAUUSD chart",
+    chartFormats: "PNG, JPG, WEBP or GIF • Max 5 MB",
+    analyzeChart: "Analyze Chart with AI",
+
+    aiSignal: "AI SIGNAL",
+    symbol: "Symbol",
+    timeframe: "Timeframe",
+    entry: "Entry",
+    stopLoss: "Stop Loss",
+    confidence: "Confidence",
+
+    technicalAnalysis: "Technical Analysis",
+    riskWarning: "Risk Warning",
+
+    history: "HISTORY",
+    previousAnalyses: "Previous AI Analyses",
+
+    privateFeed: "PRIVATE FEED",
+    privateSignals: "Private XAUUSD Signals",
+
+    support: "SUPPORT",
+    websiteSupport: "Website Support",
+    writeMessage: "Write your message...",
+    sendSupport: "Send support message",
+
+    footerTitle: "GoldAI • XAUUSD AI analysis service",
+    footerWarning: "Trading involves market risk. AI analysis does not guarantee profit.",
+
+    loading: "Loading...",
+    loginLoading: "Logging in...",
+    registerLoading: "Creating account...",
+    paymentLoading: "Submitting receipt...",
+    supportLoading: "Sending...",
+    analysisLoading: "AI is analyzing the chart...",
+
+    loginSuccess: "Login successful.",
+    registerSuccess: "Account created successfully.",
+    paymentSuccess: "Receipt submitted and waiting for administrator approval.",
+    supportSuccess: "Your message has been sent.",
+    analysisSuccess: "Chart analysis completed successfully.",
+
+    fillLogin: "Please enter your email and password.",
+    fillRegister: "Please fill in all information.",
+    chartRequired: "Please select an XAUUSD chart image first.",
+    imageOnly: "Please select an image file only.",
+    receiptRequired: "Please select your payment receipt.",
+    referenceRequired: "Please enter the payment reference.",
+    supportRequired: "Please write your message.",
+
+    invalidImageSize: "Image size must not exceed 5 MB.",
+    invalidImageType: "This image format is not allowed.",
+
+    noHistory: "No saved analyses yet.",
+    historyUnavailable: "Analysis history is currently unavailable.",
+    noSignals: "No signals have been published yet.",
+    signalsUnavailable: "Signals are currently unavailable.",
+
+    notApproved: "Your account has not been approved yet.",
+
+    paymentHesabPay: "Selected payment method: HesabPay — 240 AFN",
+    paymentBinance: "Selected payment method: Binance Pay — 4 USD / USDT",
+
+    wait: "WAIT",
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+
+    entryLabel: "Entry",
+    slLabel: "SL"
+  },
+
+
+  ar: {
+    documentTitle: "GoldAI — محلل XAUUSD بالذكاء الاصطناعي",
+
+    heroPill: "XAUUSD • تحليل الرسم البياني بالذكاء الاصطناعي",
+    heroTitle: "تحليل احترافي للذهب",
+    heroText: "قم برفع مخطط XAUUSD الخاص بك ودع GoldAI يحلل هيكل السوق الظاهر.",
+
+    hesabpayActivation: "التفعيل عبر HesabPay",
+    binanceActivation: "التفعيل عبر Binance Pay",
+    chartImageAnalysis: "تحليل صورة الرسم البياني",
+
+    login: "تسجيل الدخول",
+    createAccount: "إنشاء حساب",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    fullName: "الاسم الكامل",
+    password6: "كلمة المرور (6 أحرف على الأقل)",
+
+    goldAiMember: "عضو GOLD AI",
+    memberDashboard: "لوحة تحكم العضو",
+    logout: "تسجيل الخروج",
+
+    membership: "العضوية",
+    activateAccess: "تفعيل الوصول",
+    paymentDescription: "ادفع مرة واحدة ثم قم برفع إيصال الدفع. سيظل الوصول مقفلاً حتى يقوم المسؤول بتأكيد الدفع.",
+    transactionReference: "رقم المعاملة / Reference",
+    submitReceipt: "إرسال الإيصال للمراجعة",
+
+    goldAiVision: "GOLD AI VISION",
+    xauusdAnalyzer: "محلل مخطط XAUUSD بالذكاء الاصطناعي",
+    analyzerDescription: "اختر أولاً الإطار الزمني للتحليل، ثم قم برفع لقطة واضحة لمخطط XAUUSD على نفس الإطار الزمني.",
+
+    selectTimeframe: "اختر الإطار الزمني للتحليل",
+    oneMinute: "دقيقة واحدة",
+    fiveMinutes: "5 دقائق",
+    fifteenMinutes: "15 دقيقة",
+
+    chooseChart: "اختر مخطط XAUUSD",
+    chartFormats: "PNG، JPG، WEBP أو GIF • الحد الأقصى 5 ميغابايت",
+    analyzeChart: "تحليل المخطط بالذكاء الاصطناعي",
+
+    aiSignal: "إشارة الذكاء الاصطناعي",
+    symbol: "الرمز",
+    timeframe: "الإطار الزمني",
+    entry: "الدخول",
+    stopLoss: "وقف الخسارة",
+    confidence: "مستوى الثقة",
+
+    technicalAnalysis: "التحليل الفني",
+    riskWarning: "تحذير المخاطر",
+
+    history: "السجل",
+    previousAnalyses: "التحليلات السابقة",
+
+    privateFeed: "التغذية الخاصة",
+    privateSignals: "إشارات XAUUSD الخاصة",
+
+    support: "الدعم",
+    websiteSupport: "دعم الموقع",
+    writeMessage: "اكتب رسالتك...",
+    sendSupport: "إرسال رسالة الدعم",
+
+    footerTitle: "GoldAI • خدمة تحليل XAUUSD بالذكاء الاصطناعي",
+    footerWarning: "التداول ينطوي على مخاطر السوق. تحليل الذكاء الاصطناعي لا يضمن الربح.",
+
+    loading: "جاري التحميل...",
+    loginLoading: "جاري تسجيل الدخول...",
+    registerLoading: "جاري إنشاء الحساب...",
+    paymentLoading: "جاري إرسال الإيصال...",
+    supportLoading: "جاري الإرسال...",
+    analysisLoading: "يقوم الذكاء الاصطناعي بتحليل الرسم البياني...",
+
+    loginSuccess: "تم تسجيل الدخول بنجاح.",
+    registerSuccess: "تم إنشاء الحساب بنجاح.",
+    paymentSuccess: "تم إرسال الإيصال وينتظر موافقة المسؤول.",
+    supportSuccess: "تم إرسال رسالتك.",
+    analysisSuccess: "تم تحليل الرسم البياني بنجاح.",
+
+    fillLogin: "يرجى إدخال البريد الإلكتروني وكلمة المرور.",
+    fillRegister: "يرجى إدخال جميع المعلومات.",
+    chartRequired: "يرجى اختيار صورة مخطط XAUUSD أولاً.",
+    imageOnly: "يرجى اختيار ملف صورة فقط.",
+    receiptRequired: "يرجى اختيار إيصال الدفع.",
+    referenceRequired: "يرجى إدخال مرجع الدفع.",
+    supportRequired: "يرجى كتابة رسالتك.",
+
+    invalidImageSize: "يجب ألا يتجاوز حجم الصورة 5 ميغابايت.",
+    invalidImageType: "صيغة الصورة غير مسموحة.",
+
+    noHistory: "لا توجد تحليلات محفوظة حتى الآن.",
+    historyUnavailable: "سجل التحليلات غير متاح حالياً.",
+    noSignals: "لم يتم نشر أي إشارات بعد.",
+    signalsUnavailable: "الإشارات غير متاحة حالياً.",
+
+    notApproved: "لم تتم الموافقة على حسابك بعد.",
+
+    paymentHesabPay: "طريقة الدفع المختارة: HesabPay — 240 AFN",
+    paymentBinance: "طريقة الدفع المختارة: Binance Pay — 4 USD / USDT",
+
+    wait: "انتظار",
+    low: "منخفض",
+    medium: "متوسط",
+    high: "مرتفع",
+
+    entryLabel: "الدخول",
+    slLabel: "وقف الخسارة"
+  }
+
+};
+
+
+/* =========================================================
+   LANGUAGE
+========================================================= */
+
+function getLanguage() {
+  return localStorage.getItem("goldai_language") || "fa";
+}
+
+function setLanguage(language) {
+  if (!translations[language]) {
+    language = "fa";
+  }
+
+  localStorage.setItem(
+    "goldai_language",
+    language
+  );
+
+  const html =
+    document.documentElement;
+
+  html.lang = language;
+
+  html.dir =
+    language === "en"
+      ? "ltr"
+      : "rtl";
+
+  const langSelect =
+    $("lang");
+
+  if (langSelect) {
+    langSelect.value = language;
+  }
+
+  applyTranslations(language);
+
+  updatePaymentDetails();
+  updateTimeframeButtons();
+
+  document.title =
+    translations[language].documentTitle;
+}
+
+
+function applyTranslations(language = getLanguage()) {
+  const t =
+    translations[language] ||
+    translations.fa;
+
+  document
+    .querySelectorAll("[data-i18n]")
+    .forEach((element) => {
+
+      const key =
+        element.dataset.i18n;
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          t,
+          key
+        )
+      ) {
+        element.textContent =
+          t[key];
+      }
+    });
+
+
+  document
+    .querySelectorAll("[data-i18n-placeholder]")
+    .forEach((element) => {
+
+      const key =
+        element.dataset.i18nPlaceholder;
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          t,
+          key
+        )
+      ) {
+        element.placeholder =
+          t[key];
+      }
+    });
+
+
+  const chartPreview =
+    $("chartPreview");
+
+  if (chartPreview) {
+    chartPreview.alt =
+      language === "fa"
+        ? "پیش‌نمایش نمودار"
+        : language === "ar"
+          ? "معاينة الرسم البياني"
+          : "Chart preview";
+  }
+}
+
+
+function t(key) {
+  const language =
+    getLanguage();
+
+  return (
+    translations[language]?.[key] ||
+    translations.en[key] ||
+    key
+  );
+}
+
 
 /* =========================================================
    HELPERS
@@ -30,18 +476,20 @@ function showMessage(
       : "message";
 }
 
+
 async function api(
   url,
   options = {}
 ) {
+  const finalOptions = {
+    credentials: "include",
+    ...options
+  };
+
   const response =
     await fetch(
       url,
-      {
-        credentials:
-          "include",
-        ...options
-      }
+      finalOptions
     );
 
   let data = {};
@@ -64,6 +512,7 @@ async function api(
   return data;
 }
 
+
 function textValue(
   value,
   fallback = "WAIT"
@@ -79,6 +528,7 @@ function textValue(
   return String(value);
 }
 
+
 function getField(
   obj,
   names,
@@ -86,86 +536,65 @@ function getField(
 ) {
   if (
     !obj ||
-    typeof obj !==
-      "object"
+    typeof obj !== "object"
   ) {
     return fallback;
   }
 
-  for (
-    const name of names
-  ) {
+  for (const name of names) {
+
     if (
-      obj[name] !==
-        undefined &&
+      obj[name] !== undefined &&
       obj[name] !== null &&
-      String(
-        obj[name]
-      ).trim() !== ""
+      String(obj[name]).trim() !== ""
     ) {
       return obj[name];
     }
+
   }
 
   return fallback;
 }
 
-function escapeHtml(
-  value
-) {
+
+function escapeHtml(value) {
   if (
-    value ===
-      undefined ||
+    value === undefined ||
     value === null
   ) {
     return "";
   }
 
   return String(value)
-    .replaceAll(
-      "&",
-      "&amp;"
-    )
-    .replaceAll(
-      "<",
-      "&lt;"
-    )
-    .replaceAll(
-      ">",
-      "&gt;"
-    )
-    .replaceAll(
-      '"',
-      "&quot;"
-    )
-    .replaceAll(
-      "'",
-      "&#039;"
-    );
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
+
 
 /* =========================================================
    REGISTER
 ========================================================= */
 
-async function registerUser(
-  event
-) {
+async function registerUser(event) {
   event.preventDefault();
 
   const form =
     event.currentTarget;
 
   const name =
-    $("regName")?.value
-      .trim() || "";
+    $("regName")?.value.trim() ||
+    "";
 
   const email =
-    $("regEmail")?.value
-      .trim() || "";
+    $("regEmail")?.value.trim() ||
+    "";
 
   const password =
-    $("regPass")?.value || "";
+    $("regPass")?.value ||
+    "";
 
   if (
     !name ||
@@ -174,54 +603,50 @@ async function registerUser(
   ) {
     showMessage(
       "authMsg",
-      "Please fill in all information.",
+      t("fillRegister"),
       "error"
     );
-
     return;
   }
 
   try {
+
     showMessage(
       "authMsg",
-      "Creating account..."
+      t("registerLoading")
     );
 
     const data =
       await api(
         "/api/register",
         {
-          method:
-            "POST",
-
+          method: "POST",
           headers: {
             "Content-Type":
               "application/json"
           },
-
-          body:
-            JSON.stringify({
-              name,
-              email,
-              password
-            })
+          body: JSON.stringify({
+            name,
+            email,
+            password
+          })
         }
       );
 
     currentUser =
-      data.user ||
-      null;
+      data.user || null;
 
     showMessage(
       "authMsg",
       data.message ||
-        "Account created successfully.",
+        t("registerSuccess"),
       "success"
     );
 
     await load();
 
   } catch (error) {
+
     console.error(
       "REGISTER ERROR:",
       error
@@ -235,23 +660,21 @@ async function registerUser(
   }
 }
 
+
 /* =========================================================
    LOGIN
 ========================================================= */
 
-async function loginUser(
-  event
-) {
+async function loginUser(event) {
   event.preventDefault();
 
   const email =
-    $("loginEmail")
-      ?.value
-      .trim() || "";
+    $("loginEmail")?.value.trim() ||
+    "";
 
   const password =
-    $("loginPass")
-      ?.value || "";
+    $("loginPass")?.value ||
+    "";
 
   if (
     !email ||
@@ -259,53 +682,49 @@ async function loginUser(
   ) {
     showMessage(
       "authMsg",
-      "Please enter your email and password.",
+      t("fillLogin"),
       "error"
     );
-
     return;
   }
 
   try {
+
     showMessage(
       "authMsg",
-      "Logging in..."
+      t("loginLoading")
     );
 
     const data =
       await api(
         "/api/login",
         {
-          method:
-            "POST",
-
+          method: "POST",
           headers: {
             "Content-Type":
               "application/json"
           },
-
-          body:
-            JSON.stringify({
-              email,
-              password
-            })
+          body: JSON.stringify({
+            email,
+            password
+          })
         }
       );
 
     currentUser =
-      data.user ||
-      null;
+      data.user || null;
 
     showMessage(
       "authMsg",
       data.message ||
-        "Login successful.",
+        t("loginSuccess"),
       "success"
     );
 
     await load();
 
   } catch (error) {
+
     console.error(
       "LOGIN ERROR:",
       error
@@ -319,23 +738,25 @@ async function loginUser(
   }
 }
 
+
 /* =========================================================
    LOGOUT
 ========================================================= */
 
 async function logoutUser() {
+
   try {
+
     await api(
       "/api/logout",
       {
-        method:
-          "POST"
+        method: "POST"
       }
     );
+
   } catch (_) {}
 
-  currentUser =
-    null;
+  currentUser = null;
 
   const auth =
     $("auth");
@@ -344,8 +765,7 @@ async function logoutUser() {
     $("dashboard");
 
   if (auth) {
-    auth.style.display =
-      "";
+    auth.style.display = "";
   }
 
   if (dashboard) {
@@ -354,70 +774,71 @@ async function logoutUser() {
   }
 }
 
+
 /* =========================================================
-   PAYMENT METHOD
+   PAYMENT
 ========================================================= */
 
 function updatePaymentDetails() {
+
   const details =
     $("payDetails");
 
-  if (!details) {
-    return;
-  }
+  if (!details) return;
 
   if (
     selectedPaymentMethod ===
     "binance"
   ) {
-    details.innerHTML = `
-      <strong>Binance Pay</strong>
-      <p>
-        Payment amount: <b>4 USD / USDT</b>
-      </p>
-      <p>
-        Send your payment and enter the transaction reference below.
-      </p>
-    `;
+    details.textContent =
+      t("paymentBinance");
   } else {
-    details.innerHTML = `
-      <strong>HesabPay</strong>
-      <p>
-        Payment amount: <b>240 AFN</b>
-      </p>
-      <p>
-        Send your payment and enter the transaction reference below.
-      </p>
-    `;
+    details.textContent =
+      t("paymentHesabPay");
   }
 }
 
-function setupPaymentMethods() {
-  const buttons =
-    document.querySelectorAll(
-      ".pay[data-method]"
-    );
 
-  buttons.forEach(
-    (button) => {
+function setupPaymentMethods() {
+
+  document
+    .querySelectorAll(".pay[data-method]")
+    .forEach((button) => {
+
+      if (
+        button.classList.contains(
+          "timeframeOption"
+        )
+      ) {
+        return;
+      }
+
       button.addEventListener(
         "click",
         () => {
+
           selectedPaymentMethod =
             button.dataset.method ||
             "hesabpay";
 
-          buttons.forEach(
-            (item) => {
+          document
+            .querySelectorAll(
+              ".pay[data-method]"
+            )
+            .forEach((item) => {
+
               if (
-                item.dataset.method
+                item.classList.contains(
+                  "timeframeOption"
+                )
               ) {
-                item.classList.remove(
-                  "active"
-                );
+                return;
               }
-            }
-          );
+
+              item.classList.remove(
+                "active"
+              );
+            });
 
           button.classList.add(
             "active"
@@ -426,47 +847,38 @@ function setupPaymentMethods() {
           updatePaymentDetails();
         }
       );
-    }
-  );
+
+    });
 
   updatePaymentDetails();
 }
 
-/* =========================================================
-   PAYMENT
-========================================================= */
 
-async function submitPayment(
-  event
-) {
+async function submitPayment(event) {
   event.preventDefault();
 
   const reference =
-    $("reference")
-      ?.value
-      .trim() || "";
+    $("reference")?.value.trim() ||
+    "";
 
   const file =
-    $("receipt")
-      ?.files?.[0];
+    $("receipt")?.files?.[0];
 
   if (!reference) {
     showMessage(
       "payMsg",
-      "Please enter the payment reference.",
+      t("referenceRequired"),
       "error"
     );
-
     return;
   }
 
   if (!file) {
     showMessage(
       "payMsg",
-      "Please select your payment receipt.",
+      t("receiptRequired"),
       "error"
     );
-
     return;
   }
 
@@ -476,17 +888,17 @@ async function submitPayment(
   ) {
     showMessage(
       "payMsg",
-      "Receipt image must be 5 MB or smaller.",
+      t("invalidImageSize"),
       "error"
     );
-
     return;
   }
 
   try {
+
     showMessage(
       "payMsg",
-      "Uploading payment receipt..."
+      t("paymentLoading")
     );
 
     const formData =
@@ -519,23 +931,22 @@ async function submitPayment(
       await api(
         "/api/payment",
         {
-          method:
-            "POST",
-          body:
-            formData
+          method: "POST",
+          body: formData
         }
       );
 
     showMessage(
       "payMsg",
       data.message ||
-        "Payment receipt submitted for review.",
+        t("paymentSuccess"),
       "success"
     );
 
     await load();
 
   } catch (error) {
+
     console.error(
       "PAYMENT ERROR:",
       error
@@ -549,66 +960,62 @@ async function submitPayment(
   }
 }
 
+
 /* =========================================================
    SUPPORT
 ========================================================= */
 
 async function sendSupport() {
+
   const message =
-    $("supportText")
-      ?.value
-      .trim() || "";
+    $("supportText")?.value.trim() ||
+    "";
 
   if (!message) {
     showMessage(
       "supportMsg",
-      "Please write your message.",
+      t("supportRequired"),
       "error"
     );
-
     return;
   }
 
   try {
+
     showMessage(
       "supportMsg",
-      "Sending..."
+      t("supportLoading")
     );
 
     const data =
       await api(
         "/api/support",
         {
-          method:
-            "POST",
-
+          method: "POST",
           headers: {
             "Content-Type":
               "application/json"
           },
-
-          body:
-            JSON.stringify({
-              message
-            })
+          body: JSON.stringify({
+            message
+          })
         }
       );
 
     showMessage(
       "supportMsg",
       data.message ||
-        "Your message has been sent.",
+        t("supportSuccess"),
       "success"
     );
 
-    if (
-      $("supportText")
-    ) {
-      $("supportText")
-        .value = "";
+    if ($("supportText")) {
+      $("supportText").value =
+        "";
     }
 
   } catch (error) {
+
     console.error(
       "SUPPORT ERROR:",
       error
@@ -622,38 +1029,13 @@ async function sendSupport() {
   }
 }
 
+
 /* =========================================================
    TIMEFRAME
 ========================================================= */
 
-function timeframeLabel(
-  timeframe
-) {
-  if (
-    timeframe ===
-    "1m"
-  ) {
-    return "1 Minute";
-  }
-
-  if (
-    timeframe ===
-    "5m"
-  ) {
-    return "5 Minutes";
-  }
-
-  if (
-    timeframe ===
-    "15m"
-  ) {
-    return "15 Minutes";
-  }
-
-  return timeframe;
-}
-
 function setupTimeframes() {
+
   const buttons =
     document.querySelectorAll(
       ".timeframeOption"
@@ -661,83 +1043,87 @@ function setupTimeframes() {
 
   buttons.forEach(
     (button) => {
+
       button.addEventListener(
         "click",
         () => {
-          const value =
-            button.dataset
-              .timeframe;
-
-          if (
-            ![
-              "1m",
-              "5m",
-              "15m"
-            ].includes(
-              value
-            )
-          ) {
-            return;
-          }
 
           selectedTimeframe =
-            value;
+            button.dataset.timeframe ||
+            "1m";
 
-          buttons.forEach(
-            (item) => {
-              item.classList.remove(
-                "active"
-              );
-            }
-          );
+          const hidden =
+            $("selectedTimeframe");
 
-          button.classList.add(
-            "active"
-          );
-
-          const label =
-            timeframeLabel(
-              selectedTimeframe
-            );
-
-          const selectedText =
-            $("selectedTimeframeText");
-
-          if (
-            selectedText
-          ) {
-            selectedText.textContent =
-              `Selected timeframe: ${label}`;
+          if (hidden) {
+            hidden.value =
+              selectedTimeframe;
           }
 
-          setText(
-            "analysisTimeframe",
-            selectedTimeframe
-          );
+          updateTimeframeButtons();
 
           showMessage(
             "chartMsg",
-            `Timeframe selected: ${label}`
+            ""
           );
+
+          const result =
+            $("analysisResult");
+
+          if (result) {
+            result.style.display =
+              "none";
+          }
+
         }
       );
+
     }
   );
+
+  updateTimeframeButtons();
 }
+
+
+function updateTimeframeButtons() {
+
+  document
+    .querySelectorAll(
+      ".timeframeOption"
+    )
+    .forEach(
+      (button) => {
+
+        button.classList.toggle(
+          "active",
+          button.dataset.timeframe ===
+            selectedTimeframe
+        );
+
+      }
+    );
+
+  const hidden =
+    $("selectedTimeframe");
+
+  if (hidden) {
+    hidden.value =
+      selectedTimeframe;
+  }
+}
+
 
 /* =========================================================
    CHART PREVIEW
 ========================================================= */
 
-function previewChart(
-  event
-) {
+function previewChart(event) {
+
   const file =
     event.target.files?.[0];
 
   selectedChartFile =
-    file ||
-    null;
+    file || null;
 
   const previewWrap =
     $("chartPreviewWrap");
@@ -746,9 +1132,11 @@ function previewChart(
     $("chartPreview");
 
   if (!file) {
+
     if (previewWrap) {
-      previewWrap.style.display =
-        "none";
+      previewWrap.classList.add(
+        "hidden"
+      );
     }
 
     return;
@@ -759,17 +1147,19 @@ function previewChart(
       "image/"
     )
   ) {
+
     selectedChartFile =
       null;
 
     if (previewWrap) {
-      previewWrap.style.display =
-        "none";
+      previewWrap.classList.add(
+        "hidden"
+      );
     }
 
     showMessage(
       "chartMsg",
-      "Please select an image chart.",
+      t("imageOnly"),
       "error"
     );
 
@@ -780,22 +1170,24 @@ function previewChart(
     file.size >
     5 * 1024 * 1024
   ) {
+
     selectedChartFile =
       null;
 
     if (previewWrap) {
-      previewWrap.style.display =
-        "none";
+      previewWrap.classList.add(
+        "hidden"
+      );
     }
 
     if ($("chartFile")) {
-      $("chartFile")
-        .value = "";
+      $("chartFile").value =
+        "";
     }
 
     showMessage(
       "chartMsg",
-      "Chart image must be 5 MB or smaller.",
+      t("invalidImageSize"),
       "error"
     );
 
@@ -803,64 +1195,56 @@ function previewChart(
   }
 
   if (preview) {
-    preview.src =
-      URL.createObjectURL(
-        file
+
+    if (
+      preview.dataset.objectUrl
+    ) {
+      URL.revokeObjectURL(
+        preview.dataset.objectUrl
       );
+    }
+
+    const objectUrl =
+      URL.createObjectURL(file);
+
+    preview.src =
+      objectUrl;
+
+    preview.dataset.objectUrl =
+      objectUrl;
   }
 
   if (previewWrap) {
-    previewWrap.style.display =
-      "block";
+    previewWrap.classList.remove(
+      "hidden"
+    );
   }
 
   showMessage(
     "chartMsg",
-    `Chart selected for ${timeframeLabel(
-      selectedTimeframe
-    )}.`
+    ""
   );
 }
+
 
 /* =========================================================
    AI CHART ANALYSIS
 ========================================================= */
 
-async function analyzeChart(
-  event
-) {
+async function analyzeChart(event) {
+
   event.preventDefault();
 
   const file =
     selectedChartFile ||
-    $("chartFile")
-      ?.files?.[0];
+    $("chartFile")?.files?.[0];
 
   if (!file) {
     showMessage(
       "chartMsg",
-      "Please select the XAUUSD chart first.",
+      t("chartRequired"),
       "error"
     );
-
-    return;
-  }
-
-  if (
-    ![
-      "1m",
-      "5m",
-      "15m"
-    ].includes(
-      selectedTimeframe
-    )
-  ) {
-    showMessage(
-      "chartMsg",
-      "Please select 1m, 5m or 15m.",
-      "error"
-    );
-
     return;
   }
 
@@ -870,10 +1254,29 @@ async function analyzeChart(
   ) {
     showMessage(
       "chartMsg",
-      "Chart image must be 5 MB or smaller.",
+      t("invalidImageSize"),
       "error"
     );
+    return;
+  }
 
+  const allowedTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif"
+  ];
+
+  if (
+    !allowedTypes.includes(
+      file.type
+    )
+  ) {
+    showMessage(
+      "chartMsg",
+      t("invalidImageType"),
+      "error"
+    );
     return;
   }
 
@@ -881,6 +1284,7 @@ async function analyzeChart(
     $("analyzeBtn");
 
   if (button) {
+
     button.disabled =
       true;
 
@@ -888,19 +1292,18 @@ async function analyzeChart(
       button.textContent;
 
     button.textContent =
-      "Analyzing...";
+      t("analysisLoading");
   }
 
   showMessage(
     "chartMsg",
-    `AI is analyzing the XAUUSD ${timeframeLabel(
-      selectedTimeframe
-    )} chart...`
+    t("analysisLoading")
   );
 
   resetAnalysisResult();
 
   try {
+
     const formData =
       new FormData();
 
@@ -918,10 +1321,8 @@ async function analyzeChart(
       await api(
         "/api/analyze-chart",
         {
-          method:
-            "POST",
-          body:
-            formData
+          method: "POST",
+          body: formData
         }
       );
 
@@ -941,16 +1342,21 @@ async function analyzeChart(
       typeof analysis ===
       "string"
     ) {
+
       try {
+
         analysis =
           JSON.parse(
             analysis
           );
+
       } catch (_) {
+
         analysis = {
           analysis:
             analysis
         };
+
       }
     }
 
@@ -962,6 +1368,7 @@ async function analyzeChart(
       typeof analysis.analysis ===
         "object"
     ) {
+
       analysis =
         analysis.analysis;
     }
@@ -978,15 +1385,14 @@ async function analyzeChart(
     showMessage(
       "chartMsg",
       data.message ||
-        `Analysis completed for ${timeframeLabel(
-          selectedTimeframe
-        )}.`,
+        t("analysisSuccess"),
       "success"
     );
 
     await loadHistory();
 
   } catch (error) {
+
     console.error(
       "AI ANALYSIS ERROR:",
       error
@@ -994,72 +1400,54 @@ async function analyzeChart(
 
     showMessage(
       "chartMsg",
-      `Analysis error: ${error.message}`,
+      error.message,
       "error"
     );
 
   } finally {
+
     if (button) {
+
       button.disabled =
         false;
 
       button.textContent =
         button.dataset.oldText ||
-        "Analyze Chart with AI";
+        t("analyzeChart");
     }
+
   }
 }
+
 
 /* =========================================================
    RESET ANALYSIS
 ========================================================= */
 
 function resetAnalysisResult() {
-  const values = {
-    analysisDirection:
-      "WAIT",
 
-    analysisSymbol:
-      "XAUUSD",
-
+  const defaults = {
+    analysisDirection: "WAIT",
+    analysisSymbol: "XAUUSD",
     analysisTimeframe:
-      selectedTimeframe,
-
-    analysisEntry:
-      "WAIT",
-
-    analysisSL:
-      "WAIT",
-
-    analysisTP1:
-      "WAIT",
-
-    analysisTP2:
-      "WAIT",
-
-    analysisTP3:
-      "WAIT",
-
-    analysisTP4:
-      "WAIT",
-
-    analysisTP5:
-      "WAIT",
-
-    analysisConfidence:
-      "Low",
-
-    analysisTextContent:
-      "",
-
-    analysisWarning:
-      ""
+      selectedTimeframe.toUpperCase(),
+    analysisEntry: "WAIT",
+    analysisSL: "WAIT",
+    analysisTP1: "WAIT",
+    analysisTP2: "WAIT",
+    analysisTP3: "WAIT",
+    analysisTP4: "WAIT",
+    analysisTP5: "WAIT",
+    analysisConfidence: t("low"),
+    analysisTextContent: "",
+    analysisWarning: ""
   };
 
   Object.entries(
-    values
+    defaults
   ).forEach(
     ([id, value]) => {
+
       const el =
         $(id);
 
@@ -1067,6 +1455,7 @@ function resetAnalysisResult() {
         el.textContent =
           value;
       }
+
     }
   );
 
@@ -1079,6 +1468,7 @@ function resetAnalysisResult() {
   }
 }
 
+
 /* =========================================================
    RENDER ANALYSIS
 ========================================================= */
@@ -1086,11 +1476,13 @@ function resetAnalysisResult() {
 function renderAnalysis(
   analysis
 ) {
+
   if (
     !analysis ||
     typeof analysis !==
       "object"
   ) {
+
     showMessage(
       "chartMsg",
       "AI response could not be read.",
@@ -1099,13 +1491,6 @@ function renderAnalysis(
 
     return;
   }
-
-  console.log(
-    "AI KEYS:",
-    Object.keys(
-      analysis
-    )
-  );
 
   const direction =
     getField(
@@ -1121,8 +1506,7 @@ function renderAnalysis(
         "Action",
         "side",
         "Side"
-      ],
-      "WAIT"
+      ]
     );
 
   const symbol =
@@ -1140,7 +1524,6 @@ function renderAnalysis(
     );
 
   const timeframe =
-    selectedTimeframe ||
     getField(
       analysis,
       [
@@ -1151,7 +1534,7 @@ function renderAnalysis(
         "Interval",
         "chart_timeframe"
       ],
-      selectedTimeframe
+      selectedTimeframe.toUpperCase()
     );
 
   const entry =
@@ -1164,8 +1547,7 @@ function renderAnalysis(
         "entryPrice",
         "entry_point",
         "entryPoint"
-      ],
-      "WAIT"
+      ]
     );
 
   const stopLoss =
@@ -1178,8 +1560,7 @@ function renderAnalysis(
         "stopLoss",
         "stoploss",
         "stop_loss_price"
-      ],
-      "WAIT"
+      ]
     );
 
   const tp1 =
@@ -1191,8 +1572,7 @@ function renderAnalysis(
         "tp_1",
         "take_profit_1",
         "takeProfit1"
-      ],
-      "WAIT"
+      ]
     );
 
   const tp2 =
@@ -1204,8 +1584,7 @@ function renderAnalysis(
         "tp_2",
         "take_profit_2",
         "takeProfit2"
-      ],
-      "WAIT"
+      ]
     );
 
   const tp3 =
@@ -1217,8 +1596,7 @@ function renderAnalysis(
         "tp_3",
         "take_profit_3",
         "takeProfit3"
-      ],
-      "WAIT"
+      ]
     );
 
   const tp4 =
@@ -1230,8 +1608,7 @@ function renderAnalysis(
         "tp_4",
         "take_profit_4",
         "takeProfit4"
-      ],
-      "WAIT"
+      ]
     );
 
   const tp5 =
@@ -1243,8 +1620,7 @@ function renderAnalysis(
         "tp_5",
         "take_profit_5",
         "takeProfit5"
-      ],
-      "WAIT"
+      ]
     );
 
   const confidence =
@@ -1256,7 +1632,7 @@ function renderAnalysis(
         "confidence_level",
         "confidenceLevel"
       ],
-      "Low"
+      t("low")
     );
 
   const analysisText =
@@ -1287,7 +1663,7 @@ function renderAnalysis(
         "risk_warning",
         "riskWarning"
       ],
-      "Trading involves market risk."
+      ""
     );
 
   setText(
@@ -1347,20 +1723,19 @@ function renderAnalysis(
 
   setText(
     "analysisTextContent",
-    analysisText,
-    ""
+    analysisText
   );
 
   setText(
     "analysisWarning",
-    warning,
-    ""
+    warning
   );
 
   const directionCard =
     $("directionCard");
 
   if (directionCard) {
+
     directionCard.classList.remove(
       "buy",
       "sell",
@@ -1377,18 +1752,23 @@ function renderAnalysis(
         "BUY"
       )
     ) {
+
       directionCard.classList.add(
         "buy"
       );
+
     } else if (
       normalized.includes(
         "SELL"
       )
     ) {
+
       directionCard.classList.add(
         "sell"
       );
+
     } else {
+
       directionCard.classList.add(
         "wait"
       );
@@ -1404,15 +1784,16 @@ function renderAnalysis(
   }
 }
 
+
 /* =========================================================
    SET TEXT
 ========================================================= */
 
 function setText(
   id,
-  value,
-  fallback = "WAIT"
+  value
 ) {
+
   const el =
     $(id);
 
@@ -1420,24 +1801,24 @@ function setText(
 
   el.textContent =
     textValue(
-      value,
-      fallback
+      value
     );
 }
+
 
 /* =========================================================
    HISTORY
 ========================================================= */
 
 async function loadHistory() {
+
   const container =
     $("analysisHistory");
 
-  if (!container) {
-    return;
-  }
+  if (!container) return;
 
   try {
+
     const data =
       await api(
         "/api/analyses"
@@ -1450,14 +1831,14 @@ async function loadHistory() {
       [];
 
     if (
-      !Array.isArray(
-        items
-      ) ||
-      items.length ===
-        0
+      !Array.isArray(items) ||
+      items.length === 0
     ) {
+
       container.innerHTML =
-        "<p>No saved analyses yet.</p>";
+        `<p>${escapeHtml(
+          t("noHistory")
+        )}</p>`;
 
       return;
     }
@@ -1466,63 +1847,102 @@ async function loadHistory() {
       items
         .map(
           (item) => {
+
+            let analysis =
+              item.analysis ||
+              item.result ||
+              item;
+
+            if (
+              typeof analysis ===
+              "string"
+            ) {
+
+              try {
+
+                analysis =
+                  JSON.parse(
+                    analysis
+                  );
+
+              } catch (_) {
+
+                analysis = {};
+
+              }
+            }
+
             const direction =
               getField(
-                item,
+                analysis,
                 [
-                  "direction"
+                  "direction",
+                  "Direction",
+                  "signal",
+                  "Signal",
+                  "trade_direction",
+                  "action",
+                  "side"
                 ],
                 "WAIT"
               );
 
-            const timeframe =
-              getField(
-                item,
-                [
-                  "timeframe"
-                ],
-                "Unknown"
-              );
-
             const entry =
               getField(
-                item,
+                analysis,
                 [
-                  "entry"
+                  "entry",
+                  "Entry",
+                  "entry_price",
+                  "entryPrice"
                 ]
               );
 
             const sl =
               getField(
-                item,
+                analysis,
                 [
-                  "sl"
+                  "sl",
+                  "SL",
+                  "stop_loss",
+                  "stopLoss"
                 ]
               );
 
             const tp1 =
               getField(
-                item,
+                analysis,
                 [
-                  "tp1"
+                  "tp1",
+                  "TP1",
+                  "take_profit_1"
                 ]
               );
 
             const tp2 =
               getField(
-                item,
+                analysis,
                 [
-                  "tp2"
+                  "tp2",
+                  "TP2",
+                  "take_profit_2"
                 ]
               );
 
             const tp3 =
               getField(
-                item,
+                analysis,
                 [
-                  "tp3"
+                  "tp3",
+                  "TP3",
+                  "take_profit_3"
                 ]
               );
+
+            const timeframe =
+              item.timeframe ||
+              analysis.timeframe ||
+              "-";
 
             return `
               <div class="history-item">
@@ -1536,21 +1956,27 @@ async function loadHistory() {
                 </div>
 
                 <div>
-                  Timeframe:
+                  ${escapeHtml(
+                    t("timeframe")
+                  )}:
                   ${escapeHtml(
                     timeframe
                   )}
                 </div>
 
                 <div>
-                  Entry:
+                  ${escapeHtml(
+                    t("entryLabel")
+                  )}:
                   ${escapeHtml(
                     entry
                   )}
                 </div>
 
                 <div>
-                  SL:
+                  ${escapeHtml(
+                    t("slLabel")
+                  )}:
                   ${escapeHtml(
                     sl
                   )}
@@ -1584,29 +2010,33 @@ async function loadHistory() {
         .join("");
 
   } catch (error) {
+
     console.error(
       "HISTORY ERROR:",
       error
     );
 
     container.innerHTML =
-      "<p>Analysis history is currently unavailable.</p>";
+      `<p>${escapeHtml(
+        t("historyUnavailable")
+      )}</p>`;
   }
 }
+
 
 /* =========================================================
    SIGNALS
 ========================================================= */
 
 async function loadSignals() {
+
   const container =
     $("signals");
 
-  if (!container) {
-    return;
-  }
+  if (!container) return;
 
   try {
+
     const data =
       await api(
         "/api/signals"
@@ -1618,14 +2048,14 @@ async function loadSignals() {
       [];
 
     if (
-      !Array.isArray(
-        signals
-      ) ||
-      signals.length ===
-        0
+      !Array.isArray(signals) ||
+      signals.length === 0
     ) {
+
       container.innerHTML =
-        "<p>No signals have been published yet.</p>";
+        `<p>${escapeHtml(
+          t("noSignals")
+        )}</p>`;
 
       return;
     }
@@ -1639,15 +2069,15 @@ async function loadSignals() {
               <h3>
                 ${escapeHtml(
                   signal.title ||
-                    "XAUUSD Signal"
+                  "XAUUSD Signal"
                 )}
               </h3>
 
               <p>
                 ${escapeHtml(
                   signal.content ||
-                    signal.body ||
-                    ""
+                  signal.body ||
+                  ""
                 )}
               </p>
 
@@ -1657,55 +2087,68 @@ async function loadSignals() {
         .join("");
 
   } catch (error) {
+
     console.error(
       "SIGNALS ERROR:",
       error
     );
 
     container.innerHTML =
-      "<p>Signals are currently unavailable.</p>";
+      `<p>${escapeHtml(
+        t("signalsUnavailable")
+      )}</p>`;
   }
 }
+
 
 /* =========================================================
    STATUS
 ========================================================= */
 
-function updateMemberStatus(
-  user
-) {
+function updateUserStatus() {
+
   const status =
     $("status");
 
-  if (!status) {
+  if (!status || !currentUser) {
     return;
   }
 
   if (
-    user?.approved
+    currentUser.approved ===
+    true
   ) {
+
     status.textContent =
-      "Membership approved. AI chart analysis is available.";
+      getLanguage() === "fa"
+        ? "حساب شما فعال است."
+        : getLanguage() === "ar"
+          ? "حسابك مفعل."
+          : "Your account is active.";
+
   } else {
+
     status.textContent =
-      "Your account is active, but membership approval is still pending.";
+      t("notApproved");
   }
 }
+
 
 /* =========================================================
    MAIN LOAD
 ========================================================= */
 
 async function load() {
+
   try {
+
     const data =
       await api(
         "/api/me"
       );
 
     currentUser =
-      data.user ||
-      null;
+      data.user || null;
 
     const auth =
       $("auth");
@@ -1714,6 +2157,7 @@ async function load() {
       $("dashboard");
 
     if (!currentUser) {
+
       if (auth) {
         auth.style.display =
           "";
@@ -1737,18 +2181,10 @@ async function load() {
         "block";
     }
 
-    updateMemberStatus(
-      currentUser
-    );
+    updateUserStatus();
 
     const status =
-      currentUser.approved
-        ? "approved"
-        : "pending";
-
-    const approved =
-      status ===
-      "approved";
+      currentUser.approved;
 
     const aiPanel =
       $("aiPanel");
@@ -1759,10 +2195,8 @@ async function load() {
     const signalsPanel =
       $("signalsPanel");
 
-    const payPanel =
-      $("payPanel");
+    if (status) {
 
-    if (approved) {
       if (aiPanel) {
         aiPanel.style.display =
           "block";
@@ -1776,11 +2210,6 @@ async function load() {
       if (signalsPanel) {
         signalsPanel.style.display =
           "block";
-      }
-
-      if (payPanel) {
-        payPanel.style.display =
-          "none";
       }
 
       await Promise.all([
@@ -1789,6 +2218,7 @@ async function load() {
       ]);
 
     } else {
+
       if (aiPanel) {
         aiPanel.style.display =
           "none";
@@ -1803,14 +2233,10 @@ async function load() {
         signalsPanel.style.display =
           "none";
       }
-
-      if (payPanel) {
-        payPanel.style.display =
-          "block";
-      }
     }
 
   } catch (error) {
+
     console.error(
       "LOAD ERROR:",
       error
@@ -1818,11 +2244,13 @@ async function load() {
   }
 }
 
+
 /* =========================================================
    AUTH TABS
 ========================================================= */
 
 function setupAuthTabs() {
+
   const tabs =
     document.querySelectorAll(
       ".tab"
@@ -1830,44 +2258,46 @@ function setupAuthTabs() {
 
   tabs.forEach(
     (tab) => {
+
       tab.addEventListener(
         "click",
         () => {
+
           const target =
             tab.dataset.tab;
 
           tabs.forEach(
             (item) => {
-              item.classList.remove(
-                "active"
+              item.classList.toggle(
+                "active",
+                item === tab
               );
             }
           );
 
-          tab.classList.add(
-            "active"
-          );
-
           if (
             target ===
-            "login"
+            "register"
           ) {
+
             $("loginForm")
+              ?.classList.add(
+                "hidden"
+              );
+
+            $("registerForm")
               ?.classList.remove(
                 "hidden"
               );
 
-            $("registerForm")
-              ?.classList.add(
-                "hidden"
-              );
           } else {
-            $("loginForm")
+
+            $("registerForm")
               ?.classList.add(
                 "hidden"
               );
 
-            $("registerForm")
+            $("loginForm")
               ?.classList.remove(
                 "hidden"
               );
@@ -1879,9 +2309,40 @@ function setupAuthTabs() {
           );
         }
       );
+
     }
   );
 }
+
+
+/* =========================================================
+   LANGUAGE SELECTOR
+========================================================= */
+
+function setupLanguage() {
+
+  const lang =
+    $("lang");
+
+  if (!lang) return;
+
+  lang.addEventListener(
+    "change",
+    () => {
+
+      setLanguage(
+        lang.value
+      );
+
+      updateUserStatus();
+
+      loadHistory();
+      loadSignals();
+
+    }
+  );
+}
+
 
 /* =========================================================
    EVENT LISTENERS
@@ -1890,6 +2351,22 @@ function setupAuthTabs() {
 document.addEventListener(
   "DOMContentLoaded",
   () => {
+
+    /* Language */
+
+    setLanguage(
+      getLanguage()
+    );
+
+    setupLanguage();
+
+
+    /* Auth tabs */
+
+    setupAuthTabs();
+
+
+    /* Register */
 
     const registerForm =
       $("registerForm");
@@ -1901,6 +2378,9 @@ document.addEventListener(
       );
     }
 
+
+    /* Login */
+
     const loginForm =
       $("loginForm");
 
@@ -1910,6 +2390,9 @@ document.addEventListener(
         loginUser
       );
     }
+
+
+    /* Logout */
 
     const logoutBtn =
       $("logout");
@@ -1921,6 +2404,9 @@ document.addEventListener(
       );
     }
 
+
+    /* Payment */
+
     const paymentForm =
       $("paymentForm");
 
@@ -1930,6 +2416,11 @@ document.addEventListener(
         submitPayment
       );
     }
+
+    setupPaymentMethods();
+
+
+    /* Support */
 
     const supportBtn =
       $("supportBtn");
@@ -1941,6 +2432,9 @@ document.addEventListener(
       );
     }
 
+
+    /* Chart */
+
     const chartFile =
       $("chartFile");
 
@@ -1950,6 +2444,14 @@ document.addEventListener(
         previewChart
       );
     }
+
+
+    /* Timeframe */
+
+    setupTimeframes();
+
+
+    /* AI */
 
     const chartForm =
       $("chartForm");
@@ -1961,9 +2463,8 @@ document.addEventListener(
       );
     }
 
-    setupAuthTabs();
-    setupTimeframes();
-    setupPaymentMethods();
+
+    /* Start */
 
     load();
   }
