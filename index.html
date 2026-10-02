@@ -1,8 +1,6 @@
 <!doctype html>
-<html lang="en">
-
+<html lang="fa" dir="rtl">
 <head>
-
   <meta charset="utf-8">
 
   <meta
@@ -10,25 +8,80 @@
     content="width=device-width,initial-scale=1"
   >
 
-  <title>
-    GoldAI — XAUUSD AI Analyzer
-  </title>
+  <title>GoldAI — تحلیل هوشمند XAUUSD</title>
 
   <meta
     name="description"
-    content="GoldAI XAUUSD AI chart analysis and member access platform."
+    content="GoldAI - تحلیل هوشمند نمودار XAUUSD و دسترسی اعضا"
   >
 
-  <link
-    rel="stylesheet"
-    href="styles.css"
-  >
+  <link rel="stylesheet" href="styles.css">
 
+  <style>
+    html[dir="rtl"] body {
+      direction: rtl;
+      text-align: right;
+    }
+
+    html[dir="ltr"] body {
+      direction: ltr;
+      text-align: left;
+    }
+
+    html[dir="rtl"] .topbar,
+    html[dir="rtl"] .row,
+    html[dir="rtl"] .sectionTitle {
+      direction: rtl;
+    }
+
+    html[dir="ltr"] .topbar,
+    html[dir="ltr"] .row,
+    html[dir="ltr"] .sectionTitle {
+      direction: ltr;
+    }
+
+    html[dir="rtl"] input,
+    html[dir="rtl"] textarea,
+    html[dir="rtl"] select {
+      text-align: right;
+      direction: rtl;
+    }
+
+    html[dir="ltr"] input,
+    html[dir="ltr"] textarea,
+    html[dir="ltr"] select {
+      text-align: left;
+      direction: ltr;
+    }
+
+    html[dir="rtl"] .analysisBox b,
+    html[dir="rtl"] .analysisBox small {
+      direction: rtl;
+    }
+
+    html[dir="rtl"] .analysisBox b:has(+ *) {
+      unicode-bidi: plaintext;
+    }
+
+    .languageSelect {
+      min-width: 120px;
+    }
+
+    .timeframeOption {
+      cursor: pointer;
+    }
+
+    .timeframeOption.active {
+      outline: 2px solid currentColor;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
 </head>
 
-
 <body>
-
 
 <header class="topbar">
 
@@ -36,20 +89,14 @@
     Gold<span>AI</span>
   </div>
 
-  <select id="lang">
-
-    <option value="en">
-      English
-    </option>
-
-    <option value="fa">
-      فارسی
-    </option>
-
-    <option value="ar">
-      العربية
-    </option>
-
+  <select
+    id="lang"
+    class="languageSelect"
+    aria-label="Language"
+  >
+    <option value="fa">فارسی</option>
+    <option value="en">English</option>
+    <option value="ar">العربية</option>
   </select>
 
 </header>
@@ -57,68 +104,44 @@
 
 <main>
 
-
   <!-- HERO -->
 
-  <section
-    id="hero"
-    class="hero"
-  >
+  <section id="hero" class="hero">
 
-    <div class="pill">
-      XAUUSD • AI CHART ANALYZER
+    <div class="pill" data-i18n="heroPill">
+      XAUUSD • تحلیل هوشمند نمودار
     </div>
 
-    <h1 id="heroTitle">
-      Professional Gold Analysis
+    <h1 id="heroTitle" data-i18n="heroTitle">
+      تحلیل حرفه‌ای طلا
     </h1>
 
-    <p id="heroText">
-      Upload your XAUUSD chart and let GoldAI analyze the visible market structure.
+    <p id="heroText" data-i18n="heroText">
+      نمودار XAUUSD خود را آپلود کنید تا GoldAI ساختار قابل مشاهده بازار را تحلیل کند.
     </p>
-
 
     <div class="grid">
 
-
       <div class="card">
-
-        <b>
-          240 AFN
-        </b>
-
-        <small>
-          HesabPay activation
+        <b>240 AFN</b>
+        <small data-i18n="hesabpayActivation">
+          فعال‌سازی با حساب‌پی
         </small>
-
       </div>
 
-
       <div class="card">
-
-        <b>
-          4 USD / USDT
-        </b>
-
-        <small>
-          Binance Pay activation
+        <b>4 USD / USDT</b>
+        <small data-i18n="binanceActivation">
+          فعال‌سازی با Binance Pay
         </small>
-
       </div>
 
-
       <div class="card">
-
-        <b>
-          AI Vision
-        </b>
-
-        <small>
-          Chart image analysis
+        <b>AI Vision</b>
+        <small data-i18n="chartImageAnalysis">
+          تحلیل تصویر نمودار
         </small>
-
       </div>
-
 
     </div>
 
@@ -127,58 +150,57 @@
 
   <!-- AUTH -->
 
-  <section
-    id="auth"
-    class="panel"
-  >
+  <section id="auth" class="panel">
 
     <div class="tabs">
-
 
       <button
         class="tab active"
         data-tab="login"
         type="button"
+        data-i18n="login"
       >
-        Login
+        ورود
       </button>
-
 
       <button
         class="tab"
         data-tab="register"
         type="button"
+        data-i18n="createAccount"
       >
-        Create account
+        ساخت حساب
       </button>
-
 
     </div>
 
 
     <form id="loginForm">
 
-
       <input
         id="loginEmail"
         type="email"
-        placeholder="Email"
+        placeholder="ایمیل"
+        data-i18n-placeholder="email"
+        autocomplete="email"
         required
       >
-
 
       <input
         id="loginPass"
         type="password"
-        placeholder="Password"
+        placeholder="رمز عبور"
+        data-i18n-placeholder="password"
+        autocomplete="current-password"
         required
       >
 
-
-      <button type="submit">
-        Login
+      <button
+        type="submit"
+        data-i18n="login"
+      >
+        ورود
       </button>
-
 
     </form>
 
@@ -188,35 +210,39 @@
       class="hidden"
     >
 
-
       <input
         id="regName"
-        placeholder="Full name"
+        placeholder="نام کامل"
+        data-i18n-placeholder="fullName"
+        autocomplete="name"
         required
       >
-
 
       <input
         id="regEmail"
         type="email"
-        placeholder="Email"
+        placeholder="ایمیل"
+        data-i18n-placeholder="email"
+        autocomplete="email"
         required
       >
-
 
       <input
         id="regPass"
         type="password"
-        placeholder="Password (6+ characters)"
+        placeholder="رمز عبور (حداقل ۶ کاراکتر)"
+        data-i18n-placeholder="password6"
+        autocomplete="new-password"
         minlength="6"
         required
       >
 
-
-      <button type="submit">
-        Create account
+      <button
+        type="submit"
+        data-i18n="createAccount"
+      >
+        ساخت حساب
       </button>
-
 
     </form>
 
@@ -225,7 +251,6 @@
       id="authMsg"
       class="msg"
     ></p>
-
 
   </section>
 
@@ -237,41 +262,39 @@
     class="hidden"
   >
 
-
     <!-- MEMBER HEADER -->
 
     <div class="panel dashboardHeader">
 
       <div class="row">
 
-
         <div>
 
-          <div class="miniLabel">
-            GOLD AI MEMBER
+          <div
+            class="miniLabel"
+            data-i18n="goldAiMember"
+          >
+            عضو GOLD AI
           </div>
 
-          <h2>
-            Member Dashboard
+          <h2 data-i18n="memberDashboard">
+            داشبورد اعضا
           </h2>
 
         </div>
-
 
         <button
           id="logout"
           class="ghost"
           type="button"
+          data-i18n="logout"
         >
-          Logout
+          خروج
         </button>
-
 
       </div>
 
-
       <p id="status"></p>
-
 
     </div>
 
@@ -283,38 +306,32 @@
       class="panel"
     >
 
-
       <div class="sectionTitle">
-
 
         <div>
 
-          <div class="miniLabel">
-            MEMBERSHIP
+          <div
+            class="miniLabel"
+            data-i18n="membership"
+          >
+            عضویت
           </div>
 
-          <h2>
-            Activate access
+          <h2 data-i18n="activateAccess">
+            فعال‌سازی دسترسی
           </h2>
 
         </div>
 
-
       </div>
 
-
-      <p>
-        Pay once, then upload your payment receipt.
-        Your access remains locked until an administrator
-        verifies the payment.
+      <p data-i18n="paymentDescription">
+        مبلغ را پرداخت کنید و سپس رسید پرداخت خود را ارسال کنید.
+        دسترسی شما تا زمان تأیید توسط مدیر قفل خواهد بود.
       </p>
 
 
-      <div
-        class="payGrid"
-        id="paymentMethods"
-      >
-
+      <div class="payGrid">
 
         <button
           class="pay active"
@@ -349,7 +366,6 @@
 
         </button>
 
-
       </div>
 
 
@@ -361,26 +377,28 @@
 
       <form id="paymentForm">
 
-
         <input
           id="reference"
-          placeholder="Transaction ID / reference"
+          name="reference"
+          placeholder="شماره تراکنش / Reference"
+          data-i18n-placeholder="transactionReference"
           required
         >
 
-
         <input
           id="receipt"
+          name="receipt"
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
           required
         >
 
-
-        <button type="submit">
-          Submit receipt for review
+        <button
+          type="submit"
+          data-i18n="submitReceipt"
+        >
+          ارسال رسید برای بررسی
         </button>
-
 
       </form>
 
@@ -389,7 +407,6 @@
         id="payMsg"
         class="msg"
       ></p>
-
 
     </div>
 
@@ -401,73 +418,66 @@
       class="panel hidden"
     >
 
-
       <div class="sectionTitle">
-
 
         <div>
 
-          <div class="miniLabel">
+          <div
+            class="miniLabel"
+            data-i18n="goldAiVision"
+          >
             GOLD AI VISION
           </div>
 
-          <h2>
-            XAUUSD AI Chart Analyzer
+          <h2 data-i18n="xauusdAnalyzer">
+            تحلیلگر هوشمند نمودار XAUUSD
           </h2>
 
         </div>
-
 
         <div class="aiBadge">
           AI
         </div>
 
-
       </div>
 
 
-      <p class="muted">
-        First select the timeframe of your chart.
-        Then upload a clear XAUUSD screenshot from the same timeframe.
-        GoldAI will analyze the selected timeframe.
+      <p
+        class="muted"
+        data-i18n="analyzerDescription"
+      >
+        ابتدا تایم‌فریم مورد نظر را انتخاب کنید، سپس یک اسکرین‌شات واضح از نمودار XAUUSD همان تایم‌فریم آپلود کنید.
       </p>
 
 
       <!-- TIMEFRAME -->
 
-      <div class="timeframeSelector">
+      <div class="timeframeSection">
 
-
-        <div class="miniLabel">
-          ANALYSIS TIMEFRAME
+        <div
+          class="miniLabel"
+          data-i18n="selectTimeframe"
+        >
+          انتخاب تایم‌فریم تحلیل
         </div>
-
-
-        <p class="muted">
-          Select the timeframe first:
-        </p>
-
 
         <div
           class="payGrid"
           id="timeframeOptions"
         >
 
-
           <button
             type="button"
             class="pay timeframeOption active"
             data-timeframe="1m"
           >
-
-            <b>
-              1 Minute
+            <b data-i18n="oneMinute">
+              ۱ دقیقه
             </b>
 
             <small>
-              1m
+              1M
             </small>
-
           </button>
 
 
@@ -476,15 +486,13 @@
             class="pay timeframeOption"
             data-timeframe="5m"
           >
-
-            <b>
-              5 Minutes
+            <b data-i18n="fiveMinutes">
+              ۵ دقیقه
             </b>
 
             <small>
-              5m
+              5M
             </small>
-
           </button>
 
 
@@ -493,31 +501,27 @@
             class="pay timeframeOption"
             data-timeframe="15m"
           >
-
-            <b>
-              15 Minutes
+            <b data-i18n="fifteenMinutes">
+              ۱۵ دقیقه
             </b>
 
             <small>
-              15m
+              15M
             </small>
-
           </button>
-
 
         </div>
 
-
-        <p id="selectedTimeframeText">
-          Selected timeframe: 1 Minute
-        </p>
-
+        <input
+          type="hidden"
+          id="selectedTimeframe"
+          value="1m"
+        >
 
       </div>
 
 
       <form id="chartForm">
-
 
         <label
           for="chartFile"
@@ -528,16 +532,13 @@
             ↑
           </div>
 
-
-          <strong>
-            Choose XAUUSD chart
+          <strong data-i18n="chooseChart">
+            انتخاب نمودار XAUUSD
           </strong>
 
-
-          <span>
-            PNG, JPG, WEBP or GIF • Max 5 MB
+          <span data-i18n="chartFormats">
+            PNG، JPG، WEBP یا GIF • حداکثر ۵ مگابایت
           </span>
-
 
         </label>
 
@@ -558,7 +559,7 @@
 
           <img
             id="chartPreview"
-            alt="Chart preview"
+            alt="پیش‌نمایش نمودار"
           >
 
         </div>
@@ -567,10 +568,10 @@
         <button
           id="analyzeBtn"
           type="submit"
+          data-i18n="analyzeChart"
         >
-          Analyze Chart with AI
+          تحلیل نمودار با هوش مصنوعی
         </button>
-
 
       </form>
 
@@ -588,14 +589,13 @@
         class="hidden"
       >
 
-
         <div
           id="directionCard"
           class="directionCard"
         >
 
-          <span>
-            AI SIGNAL
+          <span data-i18n="aiSignal">
+            سیگنال هوش مصنوعی
           </span>
 
           <strong id="analysisDirection">
@@ -607,144 +607,83 @@
 
         <div class="analysisGrid">
 
-
           <div class="analysisBox">
-
-            <small>
-              Symbol
-            </small>
-
+            <small data-i18n="symbol">نماد</small>
             <b id="analysisSymbol">
               XAUUSD
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              Timeframe
-            </small>
-
+            <small data-i18n="timeframe">تایم‌فریم</small>
             <b id="analysisTimeframe">
-              1m
+              1M
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              Entry
-            </small>
-
+            <small data-i18n="entry">ورود</small>
             <b id="analysisEntry">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              Stop Loss
-            </small>
-
+            <small data-i18n="stopLoss">حد ضرر</small>
             <b id="analysisSL">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              TP1
-            </small>
-
+            <small>TP1</small>
             <b id="analysisTP1">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              TP2
-            </small>
-
+            <small>TP2</small>
             <b id="analysisTP2">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              TP3
-            </small>
-
+            <small>TP3</small>
             <b id="analysisTP3">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              TP4
-            </small>
-
+            <small>TP4</small>
             <b id="analysisTP4">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              TP5
-            </small>
-
+            <small>TP5</small>
             <b id="analysisTP5">
               WAIT
             </b>
-
           </div>
 
-
           <div class="analysisBox">
-
-            <small>
-              Confidence
-            </small>
-
+            <small data-i18n="confidence">میزان اطمینان</small>
             <b id="analysisConfidence">
               Low
             </b>
-
           </div>
-
 
         </div>
 
 
         <div class="analysisText">
 
-          <h3>
-            Technical Analysis
+          <h3 data-i18n="technicalAnalysis">
+            تحلیل تکنیکال
           </h3>
 
           <p id="analysisTextContent"></p>
@@ -754,17 +693,15 @@
 
         <div class="analysisWarning">
 
-          <strong>
-            Risk Warning
+          <strong data-i18n="riskWarning">
+            هشدار ریسک
           </strong>
 
           <p id="analysisWarning"></p>
 
         </div>
 
-
       </div>
-
 
     </div>
 
@@ -776,28 +713,26 @@
       class="panel hidden"
     >
 
-
       <div class="sectionTitle">
-
 
         <div>
 
-          <div class="miniLabel">
-            HISTORY
+          <div
+            class="miniLabel"
+            data-i18n="history"
+          >
+            تاریخچه
           </div>
 
-          <h2>
-            Previous AI Analyses
+          <h2 data-i18n="previousAnalyses">
+            تحلیل‌های قبلی
           </h2>
 
         </div>
 
-
       </div>
 
-
       <div id="analysisHistory"></div>
-
 
     </div>
 
@@ -809,28 +744,26 @@
       class="panel hidden"
     >
 
-
       <div class="sectionTitle">
-
 
         <div>
 
-          <div class="miniLabel">
-            PRIVATE FEED
+          <div
+            class="miniLabel"
+            data-i18n="privateFeed"
+          >
+            فید خصوصی
           </div>
 
-          <h2>
-            Private XAUUSD Signals
+          <h2 data-i18n="privateSignals">
+            سیگنال‌های خصوصی XAUUSD
           </h2>
 
         </div>
 
-
       </div>
 
-
       <div id="signals"></div>
-
 
     </div>
 
@@ -839,54 +772,51 @@
 
     <div class="panel">
 
-
-      <div class="miniLabel">
-        SUPPORT
+      <div
+        class="miniLabel"
+        data-i18n="support"
+      >
+        پشتیبانی
       </div>
 
-
-      <h2>
-        Website Support
+      <h2 data-i18n="websiteSupport">
+        پشتیبانی سایت
       </h2>
-
 
       <textarea
         id="supportText"
-        placeholder="Write your message..."
+        placeholder="پیام خود را بنویسید..."
+        data-i18n-placeholder="writeMessage"
       ></textarea>
-
 
       <button
         id="supportBtn"
         type="button"
+        data-i18n="sendSupport"
       >
-        Send support message
+        ارسال پیام پشتیبانی
       </button>
-
 
       <p
         id="supportMsg"
         class="msg"
       ></p>
 
-
     </div>
 
-
   </section>
-
 
 </main>
 
 
 <footer>
 
-  <div>
-    GoldAI • XAUUSD AI analysis service
+  <div data-i18n="footerTitle">
+    GoldAI • سرویس تحلیل هوشمند XAUUSD
   </div>
 
-  <small>
-    Trading involves market risk. AI analysis does not guarantee profit.
+  <small data-i18n="footerWarning">
+    معامله‌گری دارای ریسک بازار است. تحلیل هوش مصنوعی سود را تضمین نمی‌کند.
   </small>
 
 </footer>
@@ -895,5 +825,4 @@
 <script src="app.js"></script>
 
 </body>
-
 </html>
