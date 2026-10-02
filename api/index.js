@@ -113,6 +113,7 @@ app.use(async (req, res, next) => {
     next();
   } catch (error) {
     console.error("DATABASE ERROR:", error);
+
     res.status(500).json({
       error: "Database connection failed."
     });
@@ -144,13 +145,19 @@ function checkPassword(password, stored) {
       64
     );
 
-    const original = Buffer.from(stored.hash, "hex");
+    const original = Buffer.from(
+      stored.hash,
+      "hex"
+    );
 
     if (calculated.length !== original.length) {
       return false;
     }
 
-    return crypto.timingSafeEqual(calculated, original);
+    return crypto.timingSafeEqual(
+      calculated,
+      original
+    );
   } catch {
     return false;
   }
@@ -180,7 +187,8 @@ function createToken(userId, role = "user") {
 }
 
 function getCookieToken(req) {
-  const cookieHeader = req.headers.cookie || "";
+  const cookieHeader =
+    req.headers.cookie || "";
 
   const cookies = {};
 
@@ -189,8 +197,11 @@ function getCookieToken(req) {
 
     if (index === -1) return;
 
-    const key = part.slice(0, index).trim();
-    const value = part.slice(index + 1).trim();
+    const key =
+      part.slice(0, index).trim();
+
+    const value =
+      part.slice(index + 1).trim();
 
     cookies[key] = value;
   });
@@ -200,7 +211,9 @@ function getCookieToken(req) {
   }
 
   try {
-    return decodeURIComponent(cookies.goldai_session);
+    return decodeURIComponent(
+      cookies.goldai_session
+    );
   } catch {
     return cookies.goldai_session;
   }
@@ -208,36 +221,48 @@ function getCookieToken(req) {
 
 function getSession(req) {
   try {
-    const token = getCookieToken(req);
+    const token =
+      getCookieToken(req);
 
     if (!token) {
       return null;
     }
 
-    const parts = token.split(".");
+    const parts =
+      token.split(".");
 
     if (parts.length !== 2) {
       return null;
     }
 
-    const encoded = parts[0];
-    const providedSignature = parts[1];
+    const encoded =
+      parts[0];
 
-    const expectedSignature = crypto
-      .createHmac("sha256", SESSION_SECRET)
-      .update(encoded)
-      .digest("base64url");
+    const providedSignature =
+      parts[1];
 
-    const providedBuffer = Buffer.from(
-      providedSignature
-    );
+    const expectedSignature =
+      crypto
+        .createHmac(
+          "sha256",
+          SESSION_SECRET
+        )
+        .update(encoded)
+        .digest("base64url");
 
-    const expectedBuffer = Buffer.from(
-      expectedSignature
-    );
+    const providedBuffer =
+      Buffer.from(
+        providedSignature
+      );
+
+    const expectedBuffer =
+      Buffer.from(
+        expectedSignature
+      );
 
     if (
-      providedBuffer.length !== expectedBuffer.length ||
+      providedBuffer.length !==
+        expectedBuffer.length ||
       !crypto.timingSafeEqual(
         providedBuffer,
         expectedBuffer
@@ -246,24 +271,41 @@ function getSession(req) {
       return null;
     }
 
-    const payload = JSON.parse(
-      Buffer.from(encoded, "base64url").toString("utf8")
-    );
+    const payload =
+      JSON.parse(
+        Buffer.from(
+          encoded,
+          "base64url"
+        ).toString("utf8")
+      );
 
-    if (!payload.exp || Date.now() > payload.exp) {
+    if (
+      !payload.exp ||
+      Date.now() > payload.exp
+    ) {
       return null;
     }
 
     return payload;
+
   } catch (error) {
-    console.error("SESSION ERROR:", error);
+    console.error(
+      "SESSION ERROR:",
+      error
+    );
+
     return null;
   }
 }
 
-function setSessionCookie(req, res, token) {
+function setSessionCookie(
+  req,
+  res,
+  token
+) {
   const forwardedProto =
-    req.headers["x-forwarded-proto"] || "";
+    req.headers["x-forwarded-proto"] ||
+    "";
 
   const secure =
     forwardedProto === "https"
@@ -278,9 +320,13 @@ function setSessionCookie(req, res, token) {
   );
 }
 
-function clearSessionCookie(req, res) {
+function clearSessionCookie(
+  req,
+  res
+) {
   const forwardedProto =
-    req.headers["x-forwarded-proto"] || "";
+    req.headers["x-forwarded-proto"] ||
+    "";
 
   const secure =
     forwardedProto === "https"
@@ -298,23 +344,35 @@ function clearSessionCookie(req, res) {
 ========================================================= */
 
 function formatUser(row) {
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
 
   return {
     id: row.id,
     name: row.name,
     email: row.email,
     approved: Boolean(row.approved),
-    emailVerified: Boolean(row.email_verified),
+    emailVerified: Boolean(
+      row.email_verified
+    ),
     createdAt: row.created_at
   };
 }
 
-async function requireUser(req, res, next) {
+async function requireUser(
+  req,
+  res,
+  next
+) {
   try {
-    const session = getSession(req);
+    const session =
+      getSession(req);
 
-    if (!session || session.role !== "user") {
+    if (
+      !session ||
+      session.role !== "user"
+    ) {
       return res.status(401).json({
         error: "Not authenticated."
       });
@@ -333,24 +391,39 @@ async function requireUser(req, res, next) {
       });
     }
 
-    req.user = rows[0];
+    req.user =
+      rows[0];
 
     next();
+
   } catch (error) {
-    console.error("AUTH ERROR:", error);
+    console.error(
+      "AUTH ERROR:",
+      error
+    );
 
     res.status(500).json({
-      error: "Authentication failed."
+      error:
+        "Authentication failed."
     });
   }
 }
 
-function requireAdmin(req, res, next) {
-  const session = getSession(req);
+function requireAdmin(
+  req,
+  res,
+  next
+) {
+  const session =
+    getSession(req);
 
-  if (!session || session.role !== "admin") {
+  if (
+    !session ||
+    session.role !== "admin"
+  ) {
     return res.status(401).json({
-      error: "Admin authentication required."
+      error:
+        "Admin authentication required."
     });
   }
 
@@ -362,13 +435,19 @@ function requireAdmin(req, res, next) {
 ========================================================= */
 
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage:
+    multer.memoryStorage(),
 
   limits: {
-    fileSize: 5 * 1024 * 1024
+    fileSize:
+      5 * 1024 * 1024
   },
 
-  fileFilter: (req, file, cb) => {
+  fileFilter: (
+    req,
+    file,
+    cb
+  ) => {
     const allowed = [
       "image/png",
       "image/jpeg",
@@ -376,7 +455,11 @@ const upload = multer({
       "image/gif"
     ];
 
-    if (!allowed.includes(file.mimetype)) {
+    if (
+      !allowed.includes(
+        file.mimetype
+      )
+    ) {
       return cb(
         new Error(
           "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
@@ -395,189 +478,305 @@ const upload = multer({
 app.get("/", (req, res) => {
   res.json({
     ok: true,
-    service: "GoldAI API",
-    status: "online"
+    service:
+      "GoldAI API",
+    status:
+      "online"
   });
 });
 
-app.get("/api", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: DATABASE_URL ? "neon" : "missing",
-    ai: OPENAI_API_KEY ? "configured" : "missing"
-  });
-});
+app.get(
+  "/api",
+  (req, res) => {
+    res.json({
+      ok: true,
+      service:
+        "GoldAI API",
+      status:
+        "online",
+      database:
+        DATABASE_URL
+          ? "neon"
+          : "missing",
+      ai:
+        OPENAI_API_KEY
+          ? "configured"
+          : "missing"
+    });
+  }
+);
 
-app.get("/api/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: DATABASE_URL ? "neon" : "missing",
-    ai: OPENAI_API_KEY ? "configured" : "missing"
-  });
-});
+app.get(
+  "/api/health",
+  (req, res) => {
+    res.json({
+      ok: true,
+      service:
+        "GoldAI API",
+      status:
+        "online",
+      database:
+        DATABASE_URL
+          ? "neon"
+          : "missing",
+      ai:
+        OPENAI_API_KEY
+          ? "configured"
+          : "missing"
+    });
+  }
+);
 
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    status: "online"
-  });
-});
+app.get(
+  "/health",
+  (req, res) => {
+    res.json({
+      ok: true,
+      status:
+        "online"
+    });
+  }
+);
 
 /* =========================================================
    REGISTER
 ========================================================= */
 
-app.post("/api/register", async (req, res) => {
-  try {
-    const {
-      name,
-      email,
-      password
-    } = req.body || {};
-
-    const cleanName =
-      String(name || "").trim();
-
-    const cleanEmail =
-      String(email || "")
-        .trim()
-        .toLowerCase();
-
-    const cleanPassword =
-      String(password || "");
-
-    if (!cleanName || !cleanEmail || !cleanPassword) {
-      return res.status(400).json({
-        error: "Name, email and password are required."
-      });
-    }
-
-    if (cleanPassword.length < 6) {
-      return res.status(400).json({
-        error: "Password must be at least 6 characters."
-      });
-    }
-
-    const existing = await sql`
-      SELECT id
-      FROM users
-      WHERE email = ${cleanEmail}
-      LIMIT 1
-    `;
-
-    if (existing.length) {
-      return res.status(409).json({
-        error: "An account with this email already exists."
-      });
-    }
-
-    const passwordData =
-      hashPassword(cleanPassword);
-
-    const rows = await sql`
-      INSERT INTO users (
+app.post(
+  "/api/register",
+  async (req, res) => {
+    try {
+      const {
         name,
         email,
-        password_salt,
-        password_hash,
-        approved,
-        email_verified
-      )
-      VALUES (
-        ${cleanName},
-        ${cleanEmail},
-        ${passwordData.salt},
-        ${passwordData.hash},
-        FALSE,
-        FALSE
-      )
-      RETURNING *
-    `;
+        password
+      } = req.body || {};
 
-    const user = rows[0];
+      const cleanName =
+        String(name || "")
+          .trim();
 
-    setSessionCookie(
-      req,
-      res,
-      createToken(user.id, "user")
-    );
+      const cleanEmail =
+        String(email || "")
+          .trim()
+          .toLowerCase();
 
-    res.setHeader(
-      "Cache-Control",
-      "no-store"
-    );
+      const cleanPassword =
+        String(password || "");
 
-    return res.json({
-      ok: true,
-      loggedIn: true,
-      user: formatUser(user)
-    });
-  } catch (error) {
-    console.error("REGISTER ERROR:", error);
+      if (
+        !cleanName ||
+        !cleanEmail ||
+        !cleanPassword
+      ) {
+        return res.status(400).json({
+          error:
+            "Name, email and password are required."
+        });
+      }
 
-    return res.status(500).json({
-      error: "Registration failed."
-    });
+      if (
+        cleanPassword.length < 6
+      ) {
+        return res.status(400).json({
+          error:
+            "Password must be at least 6 characters."
+        });
+      }
+
+      const existing =
+        await sql`
+          SELECT id
+          FROM users
+          WHERE email = ${cleanEmail}
+          LIMIT 1
+        `;
+
+      if (existing.length) {
+        return res.status(409).json({
+          error:
+            "An account with this email already exists."
+        });
+      }
+
+      const passwordData =
+        hashPassword(
+          cleanPassword
+        );
+
+      const rows =
+        await sql`
+          INSERT INTO users (
+            name,
+            email,
+            password_salt,
+            password_hash,
+            approved,
+            email_verified
+          )
+          VALUES (
+            ${cleanName},
+            ${cleanEmail},
+            ${passwordData.salt},
+            ${passwordData.hash},
+            FALSE,
+            FALSE
+          )
+          RETURNING *
+        `;
+
+      const user =
+        rows[0];
+
+      setSessionCookie(
+        req,
+        res,
+        createToken(
+          user.id,
+          "user"
+        )
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      return res.json({
+        ok: true,
+        loggedIn:
+          true,
+        user:
+          formatUser(
+            user
+          )
+      });
+
+    } catch (error) {
+      console.error(
+        "REGISTER ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Registration failed."
+      });
+    }
   }
-});
+);
 
 /* =========================================================
    LOGIN
 ========================================================= */
 
-app.post("/api/login", async (req, res) => {
-  try {
-    const {
-      email,
-      password
-    } = req.body || {};
+app.post(
+  "/api/login",
+  async (req, res) => {
+    try {
+      const {
+        email,
+        password
+      } = req.body || {};
 
-    const cleanEmail =
-      String(email || "")
-        .trim()
-        .toLowerCase();
+      const cleanEmail =
+        String(email || "")
+          .trim()
+          .toLowerCase();
 
-    const cleanPassword =
-      String(password || "");
+      const cleanPassword =
+        String(password || "");
 
-    if (!cleanEmail || !cleanPassword) {
-      return res.status(400).json({
-        error: "Email and password are required."
+      if (
+        !cleanEmail ||
+        !cleanPassword
+      ) {
+        return res.status(400).json({
+          error:
+            "Email and password are required."
+        });
+      }
+
+      const rows =
+        await sql`
+          SELECT *
+          FROM users
+          WHERE email = ${cleanEmail}
+          LIMIT 1
+        `;
+
+      const user =
+        rows[0];
+
+      if (
+        !user ||
+        !checkPassword(
+          cleanPassword,
+          {
+            salt:
+              user.password_salt,
+            hash:
+              user.password_hash
+          }
+        )
+      ) {
+        return res.status(401).json({
+          error:
+            "Invalid email or password."
+        });
+      }
+
+      const token =
+        createToken(
+          user.id,
+          "user"
+        );
+
+      setSessionCookie(
+        req,
+        res,
+        token
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+      return res.json({
+        ok: true,
+        loggedIn:
+          true,
+        user:
+          formatUser(
+            user
+          )
+      });
+
+    } catch (error) {
+      console.error(
+        "LOGIN ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Login failed."
       });
     }
+  }
+);
 
-    const rows = await sql`
-      SELECT *
-      FROM users
-      WHERE email = ${cleanEmail}
-      LIMIT 1
-    `;
+/* =========================================================
+   LOGOUT
+========================================================= */
 
-    const user = rows[0];
-
-    if (
-      !user ||
-      !checkPassword(cleanPassword, {
-        salt: user.password_salt,
-        hash: user.password_hash
-      })
-    ) {
-      return res.status(401).json({
-        error: "Invalid email or password."
-      });
-    }
-
-    const token =
-      createToken(user.id, "user");
-
-    setSessionCookie(
+app.post(
+  "/api/logout",
+  (req, res) => {
+    clearSessionCookie(
       req,
-      res,
-      token
+      res
     );
 
     res.setHeader(
@@ -587,97 +786,100 @@ app.post("/api/login", async (req, res) => {
 
     return res.json({
       ok: true,
-      loggedIn: true,
-      user: formatUser(user)
-    });
-  } catch (error) {
-    console.error("LOGIN ERROR:", error);
-
-    return res.status(500).json({
-      error: "Login failed."
+      loggedIn:
+        false
     });
   }
-});
-
-/* =========================================================
-   LOGOUT
-========================================================= */
-
-app.post("/api/logout", (req, res) => {
-  clearSessionCookie(req, res);
-
-  res.setHeader(
-    "Cache-Control",
-    "no-store"
-  );
-
-  return res.json({
-    ok: true,
-    loggedIn: false
-  });
-});
+);
 
 /* =========================================================
    CURRENT USER
 ========================================================= */
 
-app.get("/api/me", async (req, res) => {
-  try {
-    res.setHeader(
-      "Cache-Control",
-      "no-store"
-    );
+app.get(
+  "/api/me",
+  async (req, res) => {
+    try {
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
 
-    const session =
-      getSession(req);
+      const session =
+        getSession(req);
 
-    if (!session) {
+      if (!session) {
+        return res.json({
+          loggedIn:
+            false
+        });
+      }
+
+      if (
+        session.role ===
+        "admin"
+      ) {
+        return res.json({
+          loggedIn:
+            true,
+          role:
+            "admin"
+        });
+      }
+
+      const rows =
+        await sql`
+          SELECT *
+          FROM users
+          WHERE id = ${session.userId}
+          LIMIT 1
+        `;
+
+      if (!rows.length) {
+        clearSessionCookie(
+          req,
+          res
+        );
+
+        return res.json({
+          loggedIn:
+            false
+        });
+      }
+
       return res.json({
-        loggedIn: false
+        loggedIn:
+          true,
+        role:
+          "user",
+        user:
+          formatUser(
+            rows[0]
+          )
+      });
+
+    } catch (error) {
+      console.error(
+        "ME ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Could not load session."
       });
     }
-
-    if (session.role === "admin") {
-      return res.json({
-        loggedIn: true,
-        role: "admin"
-      });
-    }
-
-    const rows = await sql`
-      SELECT *
-      FROM users
-      WHERE id = ${session.userId}
-      LIMIT 1
-    `;
-
-    if (!rows.length) {
-      clearSessionCookie(req, res);
-
-      return res.json({
-        loggedIn: false
-      });
-    }
-
-    return res.json({
-      loggedIn: true,
-      role: "user",
-      user: formatUser(rows[0])
-    });
-  } catch (error) {
-    console.error("ME ERROR:", error);
-
-    return res.status(500).json({
-      error: "Could not load session."
-    });
   }
-});
+);
 
 /* =========================================================
    PAYMENT
 ========================================================= */
 
-async function handlePayment(req, res) {
+async function handlePayment(
+  req,
+  res
+) {
   try {
     const {
       method,
@@ -687,7 +889,8 @@ async function handlePayment(req, res) {
 
     if (!req.file) {
       return res.status(400).json({
-        error: "Receipt image is required."
+        error:
+          "Receipt image is required."
       });
     }
 
@@ -697,71 +900,90 @@ async function handlePayment(req, res) {
         .toLowerCase();
 
     if (
-      cleanMethod !== "hesabpay" &&
-      cleanMethod !== "binance"
+      cleanMethod !==
+        "hesabpay" &&
+      cleanMethod !==
+        "binance"
     ) {
       return res.status(400).json({
-        error: "Invalid payment method."
+        error:
+          "Invalid payment method."
       });
     }
 
     const receiptData =
-      req.file.buffer.toString("base64");
+      req.file.buffer.toString(
+        "base64"
+      );
 
-    const rows = await sql`
-      INSERT INTO payments (
-        user_id,
-        method,
-        amount,
-        reference,
-        receipt_data,
-        receipt_mime,
-        status
-      )
-      VALUES (
-        ${req.user.id},
-        ${cleanMethod},
-        ${String(amount || "")},
-        ${String(reference || "")},
-        ${receiptData},
-        ${req.file.mimetype},
-        'pending'
-      )
-      RETURNING
-        id,
-        user_id,
-        method,
-        amount,
-        reference,
-        status,
-        created_at
-    `;
+    const rows =
+      await sql`
+        INSERT INTO payments (
+          user_id,
+          method,
+          amount,
+          reference,
+          receipt_data,
+          receipt_mime,
+          status
+        )
+        VALUES (
+          ${req.user.id},
+          ${cleanMethod},
+          ${String(
+            amount || ""
+          )},
+          ${String(
+            reference || ""
+          )},
+          ${receiptData},
+          ${req.file.mimetype},
+          'pending'
+        )
+        RETURNING
+          id,
+          user_id,
+          method,
+          amount,
+          reference,
+          status,
+          created_at
+      `;
 
     return res.json({
       ok: true,
-      payment: rows[0]
+      payment:
+        rows[0]
     });
+
   } catch (error) {
-    console.error("PAYMENT ERROR:", error);
+    console.error(
+      "PAYMENT ERROR:",
+      error
+    );
 
     return res.status(500).json({
-      error: "Payment submission failed."
+      error:
+        "Payment submission failed."
     });
   }
 }
 
-/* Both routes are supported */
 app.post(
   "/api/payments",
   requireUser,
-  upload.single("receipt"),
+  upload.single(
+    "receipt"
+  ),
   handlePayment
 );
 
 app.post(
   "/api/payment",
   requireUser,
-  upload.single("receipt"),
+  upload.single(
+    "receipt"
+  ),
   handlePayment
 );
 
@@ -774,34 +996,50 @@ app.get(
   requireUser,
   async (req, res) => {
     try {
-      const payments = await sql`
-        SELECT *
-        FROM payments
-        WHERE user_id = ${req.user.id}
-        ORDER BY created_at DESC
-        LIMIT 20
-      `;
+      const payments =
+        await sql`
+          SELECT *
+          FROM payments
+          WHERE user_id =
+            ${req.user.id}
+          ORDER BY created_at DESC
+          LIMIT 20
+        `;
 
-      const signals = await sql`
-        SELECT id, title, body, created_at
-        FROM signals
-        ORDER BY created_at DESC
-        LIMIT 50
-      `;
+      const signals =
+        await sql`
+          SELECT
+            id,
+            title,
+            body,
+            created_at
+          FROM signals
+          ORDER BY created_at DESC
+          LIMIT 50
+        `;
 
       return res.json({
         ok: true,
-        approved: Boolean(req.user.approved),
+        approved:
+          Boolean(
+            req.user.approved
+          ),
         paymentStatus:
-          payments[0]?.status || null,
+          payments[0]?.status ||
+          null,
         payments,
         signals
       });
+
     } catch (error) {
-      console.error("ACCESS ERROR:", error);
+      console.error(
+        "ACCESS ERROR:",
+        error
+      );
 
       return res.status(500).json({
-        error: "Could not load access information."
+        error:
+          "Could not load access information."
       });
     }
   }
@@ -818,59 +1056,85 @@ app.post(
     try {
       const message =
         String(
-          req.body?.message || ""
+          req.body?.message ||
+            ""
         ).trim();
 
       if (!message) {
         return res.status(400).json({
-          error: "Message is required."
+          error:
+            "Message is required."
         });
       }
 
-      const rows = await sql`
-        INSERT INTO support (
-          user_id,
-          message
-        )
-        VALUES (
-          ${req.user.id},
-          ${message}
-        )
-        RETURNING *
-      `;
+      const rows =
+        await sql`
+          INSERT INTO support (
+            user_id,
+            message
+          )
+          VALUES (
+            ${req.user.id},
+            ${message}
+          )
+          RETURNING *
+        `;
 
       return res.json({
         ok: true,
-        support: rows[0]
+        support:
+          rows[0]
       });
+
     } catch (error) {
-      console.error("SUPPORT ERROR:", error);
+      console.error(
+        "SUPPORT ERROR:",
+        error
+      );
 
       return res.status(500).json({
-        error: "Support message failed."
+        error:
+          "Support message failed."
       });
     }
   }
 );
 
 /* =========================================================
-   AI CHART ANALYSIS
+   AI HELPERS
 ========================================================= */
 
-function cleanJsonText(text) {
-  let value = String(text || "").trim();
-
-  if (value.startsWith("```")) {
-    value = value
-      .replace(/^```(?:json)?/i, "")
-      .replace(/```$/i, "")
+function cleanJsonText(
+  text
+) {
+  let value =
+    String(text || "")
       .trim();
+
+  if (
+    value.startsWith(
+      "```"
+    )
+  ) {
+    value =
+      value
+        .replace(
+          /^```(?:json)?/i,
+          ""
+        )
+        .replace(
+          /```$/i,
+          ""
+        )
+        .trim();
   }
 
   return value;
 }
 
-function normalizeDirection(value) {
+function normalizeDirection(
+  value
+) {
   const v =
     String(value || "")
       .trim()
@@ -895,7 +1159,9 @@ function normalizeDirection(value) {
   return "WAIT";
 }
 
-function normalizeConfidence(value) {
+function normalizeConfidence(
+  value
+) {
   const v =
     String(value || "")
       .trim()
@@ -918,50 +1184,315 @@ function normalizeConfidence(value) {
   return "Low";
 }
 
-function extractResponseText(data) {
+function normalizeTimeframe(
+  value
+) {
+  const v =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
   if (
-    data &&
-    typeof data.output_text === "string" &&
-    data.output_text.trim()
+    v === "1m" ||
+    v === "1min" ||
+    v === "1 minute" ||
+    v === "1 minute(s)"
   ) {
-    return data.output_text;
+    return "1m";
   }
 
-  let result = "";
+  if (
+    v === "5m" ||
+    v === "5min" ||
+    v === "5 minute" ||
+    v === "5 minutes"
+  ) {
+    return "5m";
+  }
 
-  if (Array.isArray(data?.output)) {
-    for (const item of data.output) {
-      if (!Array.isArray(item.content)) {
+  if (
+    v === "15m" ||
+    v === "15min" ||
+    v === "15 minute" ||
+    v === "15 minutes"
+  ) {
+    return "15m";
+  }
+
+  return null;
+}
+
+function extractResponseText(
+  data
+) {
+  if (
+    data &&
+    typeof data.output_text ===
+      "string" &&
+    data.output_text.trim()
+  ) {
+    return data.output_text.trim();
+  }
+
+  const chunks = [];
+
+  if (
+    Array.isArray(
+      data?.output
+    )
+  ) {
+    for (
+      const item of data.output
+    ) {
+      if (
+        !Array.isArray(
+          item?.content
+        )
+      ) {
         continue;
       }
 
-      for (const content of item.content) {
+      for (
+        const content of
+          item.content
+      ) {
         if (
-          typeof content?.text === "string"
+          content?.type ===
+            "output_text" &&
+          typeof content.text ===
+            "string"
         ) {
-          result += content.text;
+          chunks.push(
+            content.text
+          );
         }
       }
     }
   }
 
-  return result;
+  return chunks.join("").trim();
 }
+
+function findJsonObject(
+  text
+) {
+  const cleaned =
+    cleanJsonText(text);
+
+  try {
+    return JSON.parse(
+      cleaned
+    );
+  } catch (_) {}
+
+  const first =
+    cleaned.indexOf("{");
+
+  const last =
+    cleaned.lastIndexOf("}");
+
+  if (
+    first !== -1 &&
+    last !== -1 &&
+    last > first
+  ) {
+    const possible =
+      cleaned.slice(
+        first,
+        last + 1
+      );
+
+    try {
+      return JSON.parse(
+        possible
+      );
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+function normalizeAnalysis(
+  result,
+  selectedTimeframe
+) {
+  return {
+    symbol:
+      "XAUUSD",
+
+    timeframe:
+      selectedTimeframe,
+
+    direction:
+      normalizeDirection(
+        result?.direction
+      ),
+
+    entry:
+      result?.entry ??
+      result?.entry_price ??
+      result?.entryPrice ??
+      "",
+
+    tp1:
+      result?.tp1 ??
+      result?.TP1 ??
+      "",
+
+    tp2:
+      result?.tp2 ??
+      result?.TP2 ??
+      "",
+
+    tp3:
+      result?.tp3 ??
+      result?.TP3 ??
+      "",
+
+    tp4:
+      result?.tp4 ??
+      result?.TP4 ??
+      "",
+
+    tp5:
+      result?.tp5 ??
+      result?.TP5 ??
+      "",
+
+    sl:
+      result?.sl ??
+      result?.SL ??
+      result?.stop_loss ??
+      result?.stopLoss ??
+      "",
+
+    confidence:
+      normalizeConfidence(
+        result?.confidence
+      ),
+
+    analysis:
+      String(
+        result?.analysis ??
+        result?.reason ??
+        result?.explanation ??
+        ""
+      ),
+
+    warning:
+      String(
+        result?.warning ??
+        "Trading involves risk. Use proper risk management."
+      )
+  };
+}
+
+/* =========================================================
+   OPENAI REQUEST
+========================================================= */
+
+async function requestAIAnalysis(
+  imageUrl,
+  prompt
+) {
+  const response =
+    await fetch(
+      "https://api.openai.com/v1/responses",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "Authorization":
+            `Bearer ${OPENAI_API_KEY}`
+        },
+
+        body: JSON.stringify({
+          model:
+            AI_MODEL,
+
+          max_output_tokens:
+            1400,
+
+          input: [
+            {
+              role: "user",
+
+              content: [
+                {
+                  type:
+                    "input_text",
+
+                  text:
+                    prompt
+                },
+
+                {
+                  type:
+                    "input_image",
+
+                  image_url:
+                    imageUrl,
+
+                  detail:
+                    "high"
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+  const rawText =
+    await response.text();
+
+  let data;
+
+  try {
+    data =
+      JSON.parse(
+        rawText
+      );
+  } catch (_) {
+    data = {
+      raw:
+        rawText
+    };
+  }
+
+  return {
+    response,
+    data
+  };
+}
+
+/* =========================================================
+   AI CHART ANALYSIS
+========================================================= */
 
 app.post(
   "/api/analyze-chart",
   requireUser,
-  upload.single("chart"),
+  upload.single(
+    "chart"
+  ),
   async (req, res) => {
     try {
-      if (!req.user.approved) {
+      if (
+        !req.user.approved
+      ) {
         return res.status(403).json({
           error:
             "Your account has not been approved yet."
         });
       }
 
-      if (!OPENAI_API_KEY) {
+      if (
+        !OPENAI_API_KEY
+      ) {
         return res.status(500).json({
           error:
             "OPENAI_API_KEY is not configured."
@@ -975,26 +1506,68 @@ app.post(
         });
       }
 
+      const selectedTimeframe =
+        normalizeTimeframe(
+          req.body?.timeframe
+        );
+
+      if (
+        !selectedTimeframe
+      ) {
+        return res.status(400).json({
+          error:
+            "Please select 1m, 5m or 15m timeframe."
+        });
+      }
+
       const base64 =
-        req.file.buffer.toString("base64");
+        req.file.buffer.toString(
+          "base64"
+        );
 
       const imageUrl =
         `data:${req.file.mimetype};base64,${base64}`;
 
       const prompt = `
-You are GoldAI, an XAUUSD market chart analyzer.
+You are GoldAI, an XAUUSD technical chart analyzer.
 
-Analyze the uploaded XAUUSD chart carefully.
+The user has selected this timeframe:
 
-Return ONLY valid JSON.
-Do not use markdown.
-Do not write anything before or after the JSON.
+${selectedTimeframe}
 
-Required JSON structure:
+IMPORTANT:
+The selected timeframe is AUTHORITATIVE.
+Analyze the chart specifically for ${selectedTimeframe}.
+Do NOT replace it with another timeframe.
+Do NOT guess a different timeframe.
+
+The uploaded image should be treated as an XAUUSD chart screenshot.
+
+Your task is to inspect ONLY what is visible in the chart.
+
+Look carefully at:
+- current visible price
+- candlestick structure
+- trend
+- support and resistance
+- visible indicators
+- momentum if visible
+- breakout or rejection if visible
+- market structure
+- nearby price levels
+
+Do not invent indicators or information that cannot be seen.
+
+Return ONLY one valid JSON object.
+No markdown.
+No code fences.
+No text before or after JSON.
+
+Use exactly this structure:
 
 {
   "symbol": "XAUUSD",
-  "timeframe": "15m",
+  "timeframe": "${selectedTimeframe}",
   "direction": "BUY",
   "entry": "0000",
   "tp1": "0000",
@@ -1004,226 +1577,266 @@ Required JSON structure:
   "tp5": "0000",
   "sl": "0000",
   "confidence": "Medium",
-  "analysis": "short explanation",
-  "warning": "risk warning"
+  "analysis": "short technical explanation",
+  "warning": "short risk warning"
 }
 
 Rules:
 
-- symbol must be XAUUSD.
-- direction must be exactly BUY, SELL, or WAIT.
-- timeframe must identify the visible chart timeframe if possible.
-- entry must contain a realistic price level or price zone.
-- tp1 through tp5 must be realistic price levels.
-- sl must be a realistic stop-loss level.
-- confidence must be exactly Low, Medium, or High.
-- If the chart does not provide enough evidence for a directional trade, use WAIT.
-- Do not invent indicators that are not visible.
-- Use the actual visible price levels from the chart.
-- Keep analysis concise.
-- Keep warning concise.
+1. symbol must be exactly XAUUSD.
+
+2. timeframe must be exactly:
+"${selectedTimeframe}"
+
+3. direction must be exactly:
+BUY
+SELL
+or WAIT
+
+4. If the visible chart does not provide enough evidence for a directional trade, use WAIT.
+
+5. Entry must be a realistic visible price or price zone.
+
+6. TP1 through TP5 must be realistic price levels based on visible structure.
+
+7. SL must be a realistic invalidation/stop-loss level.
+
+8. confidence must be exactly:
+Low
+Medium
+or High
+
+9. Do not invent an indicator that is not visible.
+
+10. Do not claim certainty.
+
+11. Keep the analysis short.
+
+12. Keep the warning short.
+
+13. If the image is not a usable XAUUSD chart, return:
+direction = WAIT
+and explain the problem in analysis.
+
+14. If the selected timeframe cannot be visually confirmed from the screenshot, still use the user's selected timeframe "${selectedTimeframe}" as the timeframe field.
+
+Return JSON only.
 `;
 
-      const response =
-        await fetch(
-          "https://api.openai.com/v1/responses",
+      let aiResult =
+        await requestAIAnalysis(
+          imageUrl,
+          prompt
+        );
+
+      if (
+        !aiResult.response.ok
+      ) {
+        console.error(
+          "OPENAI FIRST ERROR:",
+          aiResult.data
+        );
+
+        return res.status(
+          aiResult.response.status >= 400 &&
+          aiResult.response.status < 600
+            ? 502
+            : 500
+        ).json({
+          error:
+            aiResult.data?.error?.message ||
+            "OpenAI analysis failed.",
+          details:
+            aiResult.data?.error?.type ||
+            null
+        });
+      }
+
+      let responseText =
+        extractResponseText(
+          aiResult.data
+        );
+
+      /*
+        اگر خروجی اول خالی بود،
+        یک بار با prompt کوتاه‌تر دوباره تلاش می‌کنیم.
+      */
+
+      if (!responseText) {
+        console.warn(
+          "OPENAI EMPTY RESPONSE. RETRYING..."
+        );
+
+        const retryPrompt = `
+Analyze this XAUUSD chart for the user's selected timeframe: ${selectedTimeframe}.
+
+Return ONLY valid JSON.
+
+{
+  "symbol":"XAUUSD",
+  "timeframe":"${selectedTimeframe}",
+  "direction":"BUY",
+  "entry":"",
+  "tp1":"",
+  "tp2":"",
+  "tp3":"",
+  "tp4":"",
+  "tp5":"",
+  "sl":"",
+  "confidence":"Low",
+  "analysis":"",
+  "warning":"Trading involves risk."
+}
+
+direction must be BUY, SELL or WAIT.
+confidence must be Low, Medium or High.
+Use only information visible in the image.
+If there is not enough evidence, use WAIT.
+Do not write markdown.
+Return JSON only.
+`;
+
+        aiResult =
+          await requestAIAnalysis(
+            imageUrl,
+            retryPrompt
+          );
+
+        if (
+          !aiResult.response.ok
+        ) {
+          console.error(
+            "OPENAI RETRY ERROR:",
+            aiResult.data
+          );
+
+          return res.status(502).json({
+            error:
+              aiResult.data?.error?.message ||
+              "OpenAI analysis failed on retry."
+          });
+        }
+
+        responseText =
+          extractResponseText(
+            aiResult.data
+          );
+      }
+
+      if (!responseText) {
+        console.error(
+          "OPENAI EMPTY RESPONSE FINAL:",
           {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              "Authorization":
-                `Bearer ${OPENAI_API_KEY}`
-            },
-
-            body: JSON.stringify({
-              model: AI_MODEL,
-
-              input: [
-                {
-                  role: "user",
-
-                  content: [
-                    {
-                      type: "input_text",
-                      text: prompt
-                    },
-
-                    {
-                      type: "input_image",
-                      image_url: imageUrl,
-                      detail: "high"
-                    }
-                  ]
-                }
-              ]
-            })
+            status:
+              aiResult.data?.status,
+            incomplete:
+              aiResult.data?.incomplete_details,
+            outputCount:
+              Array.isArray(
+                aiResult.data?.output
+              )
+                ? aiResult.data.output.length
+                : 0,
+            model:
+              aiResult.data?.model ||
+              AI_MODEL
           }
         );
 
-      const rawText =
-        await response.text();
-
-      let data;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = {
-          raw: rawText
-        };
-      }
-
-      if (!response.ok) {
-        console.error(
-          "OPENAI ERROR:",
-          data
-        );
-
-        return res.status(500).json({
+        return res.status(502).json({
           error:
-            data?.error?.message ||
-            "OpenAI analysis failed."
+            "AI returned no readable text output. Please try the chart again."
         });
       }
 
-      const responseText =
-        extractResponseText(data);
-
-      if (!responseText) {
-        return res.status(500).json({
-          error:
-            "AI returned an empty response."
-        });
-      }
-
-      let result;
-
-      try {
-        result = JSON.parse(
-          cleanJsonText(responseText)
+      const parsed =
+        findJsonObject(
+          responseText
         );
-      } catch (error) {
+
+      if (
+        !parsed ||
+        typeof parsed !==
+          "object"
+      ) {
         console.error(
           "AI JSON PARSE ERROR:",
           responseText
         );
 
-        return res.status(500).json({
+        return res.status(502).json({
           error:
-            "AI returned invalid analysis data."
+            "AI returned an unreadable analysis. Please try again."
         });
       }
 
-      result = {
-        symbol:
-          result.symbol || "XAUUSD",
+      const result =
+        normalizeAnalysis(
+          parsed,
+          selectedTimeframe
+        );
 
-        timeframe:
-          result.timeframe || "Unknown",
-
-        direction:
-          normalizeDirection(
-            result.direction
-          ),
-
-        entry:
-          result.entry ??
-          result.entry_price ??
-          result.entryPrice ??
-          "",
-
-        tp1:
-          result.tp1 ??
-          result.TP1 ??
-          "",
-
-        tp2:
-          result.tp2 ??
-          result.TP2 ??
-          "",
-
-        tp3:
-          result.tp3 ??
-          result.TP3 ??
-          "",
-
-        tp4:
-          result.tp4 ??
-          result.TP4 ??
-          "",
-
-        tp5:
-          result.tp5 ??
-          result.TP5 ??
-          "",
-
-        sl:
-          result.sl ??
-          result.SL ??
-          result.stop_loss ??
-          result.stopLoss ??
-          "",
-
-        confidence:
-          normalizeConfidence(
-            result.confidence
-          ),
-
-        analysis:
-          result.analysis ||
-          result.reason ||
-          result.explanation ||
-          "",
-
-        warning:
-          result.warning ||
-          "Trading involves risk. Use proper risk management."
-      };
-
-      const saved = await sql`
-        INSERT INTO analyses (
-          user_id,
-          symbol,
-          timeframe,
-          direction,
-          entry,
-          tp1,
-          tp2,
-          tp3,
-          tp4,
-          tp5,
-          sl,
-          confidence,
-          analysis,
-          warning
-        )
-        VALUES (
-          ${req.user.id},
-          ${result.symbol},
-          ${result.timeframe},
-          ${result.direction},
-          ${String(result.entry)},
-          ${String(result.tp1)},
-          ${String(result.tp2)},
-          ${String(result.tp3)},
-          ${String(result.tp4)},
-          ${String(result.tp5)},
-          ${String(result.sl)},
-          ${result.confidence},
-          ${result.analysis},
-          ${result.warning}
-        )
-        RETURNING *
-      `;
+      const saved =
+        await sql`
+          INSERT INTO analyses (
+            user_id,
+            symbol,
+            timeframe,
+            direction,
+            entry,
+            tp1,
+            tp2,
+            tp3,
+            tp4,
+            tp5,
+            sl,
+            confidence,
+            analysis,
+            warning
+          )
+          VALUES (
+            ${req.user.id},
+            ${result.symbol},
+            ${result.timeframe},
+            ${result.direction},
+            ${String(
+              result.entry
+            )},
+            ${String(
+              result.tp1
+            )},
+            ${String(
+              result.tp2
+            )},
+            ${String(
+              result.tp3
+            )},
+            ${String(
+              result.tp4
+            )},
+            ${String(
+              result.tp5
+            )},
+            ${String(
+              result.sl
+            )},
+            ${result.confidence},
+            ${result.analysis},
+            ${result.warning}
+          )
+          RETURNING *
+        `;
 
       return res.json({
         ok: true,
-        analysis: result,
-        saved: saved[0]
+
+        analysis:
+          result,
+
+        saved:
+          saved[0]
       });
+
     } catch (error) {
       console.error(
         "ANALYZE ERROR:",
@@ -1248,18 +1861,22 @@ app.get(
   requireUser,
   async (req, res) => {
     try {
-      const rows = await sql`
-        SELECT *
-        FROM analyses
-        WHERE user_id = ${req.user.id}
-        ORDER BY created_at DESC
-        LIMIT 100
-      `;
+      const rows =
+        await sql`
+          SELECT *
+          FROM analyses
+          WHERE user_id =
+            ${req.user.id}
+          ORDER BY created_at DESC
+          LIMIT 100
+        `;
 
       return res.json({
         ok: true,
-        analyses: rows
+        analyses:
+          rows
       });
+
     } catch (error) {
       console.error(
         "ANALYSES ERROR:",
@@ -1278,42 +1895,52 @@ app.get(
    ADMIN LOGIN
 ========================================================= */
 
-app.post("/api/admin/login", (req, res) => {
-  const password =
-    String(
-      req.body?.password || ""
+app.post(
+  "/api/admin/login",
+  (req, res) => {
+    const password =
+      String(
+        req.body?.password ||
+          ""
+      );
+
+    if (
+      !password ||
+      password !==
+        ADMIN_PASSWORD
+    ) {
+      return res.status(401).json({
+        error:
+          "Invalid admin password."
+      });
+    }
+
+    const token =
+      createToken(
+        "admin",
+        "admin"
+      );
+
+    setSessionCookie(
+      req,
+      res,
+      token
     );
 
-  if (
-    !password ||
-    password !== ADMIN_PASSWORD
-  ) {
-    return res.status(401).json({
-      error:
-        "Invalid admin password."
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
+    return res.json({
+      ok: true,
+      loggedIn:
+        true,
+      role:
+        "admin"
     });
   }
-
-  const token =
-    createToken("admin", "admin");
-
-  setSessionCookie(
-    req,
-    res,
-    token
-  );
-
-  res.setHeader(
-    "Cache-Control",
-    "no-store"
-  );
-
-  return res.json({
-    ok: true,
-    loggedIn: true,
-    role: "admin"
-  });
-});
+);
 
 /* =========================================================
    ADMIN DATA
@@ -1324,41 +1951,44 @@ app.get(
   requireAdmin,
   async (req, res) => {
     try {
-      const users = await sql`
-        SELECT
-          id,
-          name,
-          email,
-          approved,
-          email_verified,
-          created_at
-        FROM users
-        ORDER BY created_at DESC
-      `;
+      const users =
+        await sql`
+          SELECT
+            id,
+            name,
+            email,
+            approved,
+            email_verified,
+            created_at
+          FROM users
+          ORDER BY created_at DESC
+        `;
 
-      const payments = await sql`
-        SELECT
-          p.id,
-          p.user_id,
-          p.method,
-          p.amount,
-          p.reference,
-          p.status,
-          p.created_at,
-          p.reviewed_at,
-          u.name,
-          u.email
-        FROM payments p
-        LEFT JOIN users u
-          ON u.id = p.user_id
-        ORDER BY p.created_at DESC
-      `;
+      const payments =
+        await sql`
+          SELECT
+            p.id,
+            p.user_id,
+            p.method,
+            p.amount,
+            p.reference,
+            p.status,
+            p.created_at,
+            p.reviewed_at,
+            u.name,
+            u.email
+          FROM payments p
+          LEFT JOIN users u
+            ON u.id = p.user_id
+          ORDER BY p.created_at DESC
+        `;
 
-      const signals = await sql`
-        SELECT *
-        FROM signals
-        ORDER BY created_at DESC
-      `;
+      const signals =
+        await sql`
+          SELECT *
+          FROM signals
+          ORDER BY created_at DESC
+        `;
 
       return res.json({
         ok: true,
@@ -1366,6 +1996,7 @@ app.get(
         payments,
         signals
       });
+
     } catch (error) {
       console.error(
         "ADMIN DATA ERROR:",
@@ -1390,42 +2021,54 @@ app.get(
   async (req, res) => {
     try {
       const id =
-        Number(req.params.id);
+        Number(
+          req.params.id
+        );
 
-      const rows = await sql`
-        SELECT
-          receipt_data,
-          receipt_mime
-        FROM payments
-        WHERE id = ${id}
-        LIMIT 1
-      `;
+      const rows =
+        await sql`
+          SELECT
+            receipt_data,
+            receipt_mime
+          FROM payments
+          WHERE id = ${id}
+          LIMIT 1
+        `;
 
       if (!rows.length) {
         return res.status(404).json({
-          error: "Payment not found."
+          error:
+            "Payment not found."
         });
       }
 
-      if (!rows[0].receipt_data) {
+      if (
+        !rows[0].receipt_data
+      ) {
         return res.status(404).json({
-          error: "Receipt not found."
+          error:
+            "Receipt not found."
         });
       }
 
       const buffer =
         Buffer.from(
-          rows[0].receipt_data,
+          rows[0]
+            .receipt_data,
           "base64"
         );
 
       res.setHeader(
         "Content-Type",
-        rows[0].receipt_mime ||
+        rows[0]
+          .receipt_mime ||
           "image/jpeg"
       );
 
-      return res.send(buffer);
+      return res.send(
+        buffer
+      );
+
     } catch (error) {
       console.error(
         "RECEIPT ERROR:",
@@ -1450,33 +2093,42 @@ app.post(
   async (req, res) => {
     try {
       const id =
-        Number(req.params.id);
+        Number(
+          req.params.id
+        );
 
-      const rows = await sql`
-        UPDATE payments
-        SET
-          status = 'approved',
-          reviewed_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
-      `;
+      const rows =
+        await sql`
+          UPDATE payments
+          SET
+            status =
+              'approved',
+            reviewed_at =
+              NOW()
+          WHERE id = ${id}
+          RETURNING *
+        `;
 
       if (!rows.length) {
         return res.status(404).json({
-          error: "Payment not found."
+          error:
+            "Payment not found."
         });
       }
 
       await sql`
         UPDATE users
         SET approved = TRUE
-        WHERE id = ${rows[0].user_id}
+        WHERE id =
+          ${rows[0].user_id}
       `;
 
       return res.json({
         ok: true,
-        payment: rows[0]
+        payment:
+          rows[0]
       });
+
     } catch (error) {
       console.error(
         "APPROVE ERROR:",
@@ -1501,27 +2153,35 @@ app.post(
   async (req, res) => {
     try {
       const id =
-        Number(req.params.id);
+        Number(
+          req.params.id
+        );
 
-      const rows = await sql`
-        UPDATE payments
-        SET
-          status = 'rejected',
-          reviewed_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
-      `;
+      const rows =
+        await sql`
+          UPDATE payments
+          SET
+            status =
+              'rejected',
+            reviewed_at =
+              NOW()
+          WHERE id = ${id}
+          RETURNING *
+        `;
 
       if (!rows.length) {
         return res.status(404).json({
-          error: "Payment not found."
+          error:
+            "Payment not found."
         });
       }
 
       return res.json({
         ok: true,
-        payment: rows[0]
+        payment:
+          rows[0]
       });
+
     } catch (error) {
       console.error(
         "REJECT ERROR:",
@@ -1546,31 +2206,37 @@ app.post(
   async (req, res) => {
     try {
       const id =
-        Number(req.params.id);
+        Number(
+          req.params.id
+        );
 
-      const rows = await sql`
-        UPDATE users
-        SET approved = TRUE
-        WHERE id = ${id}
-        RETURNING
-          id,
-          name,
-          email,
-          approved,
-          email_verified,
-          created_at
-      `;
+      const rows =
+        await sql`
+          UPDATE users
+          SET approved = TRUE
+          WHERE id = ${id}
+          RETURNING
+            id,
+            name,
+            email,
+            approved,
+            email_verified,
+            created_at
+        `;
 
       if (!rows.length) {
         return res.status(404).json({
-          error: "User not found."
+          error:
+            "User not found."
         });
       }
 
       return res.json({
         ok: true,
-        user: rows[0]
+        user:
+          rows[0]
       });
+
     } catch (error) {
       console.error(
         "USER APPROVE ERROR:",
@@ -1596,37 +2262,45 @@ app.post(
     try {
       const title =
         String(
-          req.body?.title || ""
+          req.body?.title ||
+            ""
         ).trim();
 
       const body =
         String(
-          req.body?.body || ""
+          req.body?.body ||
+            ""
         ).trim();
 
-      if (!title || !body) {
+      if (
+        !title ||
+        !body
+      ) {
         return res.status(400).json({
           error:
             "Title and body are required."
         });
       }
 
-      const rows = await sql`
-        INSERT INTO signals (
-          title,
-          body
-        )
-        VALUES (
-          ${title},
-          ${body}
-        )
-        RETURNING *
-      `;
+      const rows =
+        await sql`
+          INSERT INTO signals (
+            title,
+            body
+          )
+          VALUES (
+            ${title},
+            ${body}
+          )
+          RETURNING *
+        `;
 
       return res.json({
         ok: true,
-        signal: rows[0]
+        signal:
+          rows[0]
       });
+
     } catch (error) {
       console.error(
         "CREATE SIGNAL ERROR:",
@@ -1651,7 +2325,9 @@ app.delete(
   async (req, res) => {
     try {
       const id =
-        Number(req.params.id);
+        Number(
+          req.params.id
+        );
 
       await sql`
         DELETE FROM signals
@@ -1661,6 +2337,7 @@ app.delete(
       return res.json({
         ok: true
       });
+
     } catch (error) {
       console.error(
         "DELETE SIGNAL ERROR:",
@@ -1679,28 +2356,36 @@ app.delete(
    MULTER / GENERAL ERRORS
 ========================================================= */
 
-app.use((error, req, res, next) => {
-  console.error(
-    "API ERROR:",
-    error
-  );
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
+    console.error(
+      "API ERROR:",
+      error
+    );
 
-  if (
-    error instanceof multer.MulterError
-  ) {
-    return res.status(400).json({
+    if (
+      error instanceof
+      multer.MulterError
+    ) {
+      return res.status(400).json({
+        error:
+          error.message ||
+          "Upload error."
+      });
+    }
+
+    return res.status(500).json({
       error:
-        error.message ||
-        "Upload error."
+        error?.message ||
+        "Server error."
     });
   }
-
-  return res.status(500).json({
-    error:
-      error?.message ||
-      "Server error."
-  });
-});
+);
 
 /* =========================================================
    EXPORT
