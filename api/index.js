@@ -7,191 +7,166 @@ const crypto = require("crypto");
 const app = express();
 
 /* =========================
-   VERCEL TEMP STORAGE
+   BASIC SETTINGS
 ========================= */
 
-const DATA = path.join("/tmp", "goldai");
-const UPLOADS = path.join(DATA, "receipts");
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-fs.mkdirSync(UPLOADS, { recursive: true });
+const DATA_DIR = "/tmp/goldai";
+const UPLOAD_DIR = path.join(DATA_DIR, "receipts");
+const DB_FILE = path.join(DATA_DIR, "db.json");
 
-const DB = path.join(DATA, "db.json");
-
-/* =========================
-   SETTINGS
-========================= */
-
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  "goldai-local-session-secret";
-
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD ||
-  "CHANGE_THIS_ADMIN_PASSWORD";
+try {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+} catch (err) {
+  console.error("Directory error:", err);
+}
 
 /* =========================
    DATABASE
 ========================= */
 
-function load() {
-  if (!fs.existsSync(DB)) {
-    const initial = {
-      users: [],
-      payments: [],
-      signals: [],
-      support: []
-    };
+function createEmptyDB() {
+  return {
+    users: [],
+    payments: [],
+    signals: [],
+    support: []
+  };
+}
 
-    fs.writeFileSync(
-      DB,
-      JSON.stringify(initial, null, 2)
-    );
-
-    return initial;
-  }
-
+function loadDB() {
   try {
-    return JSON.parse(
-      fs.readFileSync(DB, "utf8")
-    );
-  } catch {
-    return {
-      users: [],
-      payments: [],
-      signals: [],
-      support: []
-    };
+    if (!fs.existsSync(DB_FILE)) {
+      const db = createEmptyDB();
+      fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+      return db;
+    }
+
+    return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  } catch (err) {
+    console.error("DB load error:", err);
+    return createEmptyDB();
   }
 }
 
-let db = load();
+let db = loadDB();
 
-function save() {
-  fs.writeFileSync(
-    DB,
-    JSON.stringify(db, null, 2)
-  );
+function saveDB() {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+    return true;
+  } catch (err) {
+    console.error("DB save error:", err);
+    return false;
+  }
 }
 
 /* =========================
    HELPERS
 ========================= */
 
-function makeId() {
+function createId() {
   return crypto.randomUUID();
 }
 
-function hashPassword(
-  password,
-  salt = crypto.randomBytes(16).toString("hex")
-) {
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || "goldai-change-this-secret";
+
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD || "change-admin-password";
+
+function hashPassword(password, salt) {
+  const realSalt =
+    salt || crypto.randomBytes(16).toString("hex");
+
   const hash = crypto
-    .scryptSync(password, salt, 64)
+    .scryptSync(password, realSalt, 64)
     .toString("hex");
 
   return {
-    salt,
+    salt: realSalt,
     hash
   };
 }
 
-function checkPassword(password, obj) {
+function checkPassword(password, stored) {
   try {
     const hash = crypto
-      .scryptSync(password, obj.salt, 64)
+      .scryptSync(password, stored.salt, 64)
       .toString("hex");
 
     return crypto.timingSafeEqual(
       Buffer.from(hash),
-      Buffer.from(obj.hash)
+      Buffer.from(stored.hash)
     );
   } catch {
     return false;
   }
 }
 
-/* =========================
-   SESSION
-========================= */
-
 function createToken(userId, role) {
   const payload = Buffer.from(
     JSON.stringify({
       userId,
       role,
-      exp:
-        Date.now() +
-        1000 * 60 * 60 * 24 * 7
+      exp: Date.now() + 1000 * 60 * 60 * 24 * 7
     })
   ).toString("base64url");
 
   const signature = crypto
-    .createHmac(
-      "sha256",
-      SESSION_SECRET
-    )
+    .createHmac("sha256", SESSION_SECRET)
     .update(payload)
     .digest("base64url");
 
   return `${payload}.${signature}`;
 }
 
-function readToken(req) {
-  const cookies =
-    req.headers.cookie || "";
+function getCookieToken(req) {
+  const cookieHeader = req.headers.cookie || "";
 
-  const item = cookies
+  const cookie = cookieHeader
     .split(";")
     .map(x => x.trim())
-    .find(
-      x =>
-        x.startsWith(
-          "goldai_session="
-        )
-    );
+    .find(x => x.startsWith("goldai_session="));
 
-  if (!item) return null;
+  if (!cookie) return null;
 
   return decodeURIComponent(
-    item.split("=")[1]
+    cookie.substring("goldai_session=".length)
   );
 }
 
 function getSession(req) {
-  const token = readToken(req);
+  const token = getCookieToken(req);
 
   if (!token) return null;
 
-  const [payload, signature] =
-    token.split(".");
+  const parts = token.split(".");
 
-  if (!payload || !signature) {
-    return null;
-  }
+  if (parts.length !== 2) return null;
+
+  const payload = parts[0];
+  const signature = parts[1];
 
   const expected = crypto
-    .createHmac(
-      "sha256",
-      SESSION_SECRET
-    )
+    .createHmac("sha256", SESSION_SECRET)
     .update(payload)
     .digest("base64url");
 
-  if (signature !== expected) {
-    return null;
-  }
+  if (signature !== expected) return null;
 
   try {
-    const session = JSON.parse(
-      Buffer.from(
-        payload,
-        "base64url"
-      ).toString()
+    const data = JSON.parse(
+      Buffer.from(payload, "base64url").toString()
     );
 
-    return session.exp > Date.now()
-      ? session
-      : null;
+    if (!data.exp || data.exp < Date.now()) {
+      return null;
+    }
+
+    return data;
   } catch {
     return null;
   }
@@ -210,38 +185,23 @@ function setSessionCookie(res, token) {
    AUTH MIDDLEWARE
 ========================= */
 
-function requireUser(
-  req,
-  res,
-  next
-) {
-  const session =
-    getSession(req);
+function requireUser(req, res, next) {
+  const session = getSession(req);
 
-  if (
-    !session ||
-    session.role !== "user"
-  ) {
-    return res
-      .status(401)
-      .json({
-        error: "LOGIN_REQUIRED"
-      });
+  if (!session || session.role !== "user") {
+    return res.status(401).json({
+      error: "LOGIN_REQUIRED"
+    });
   }
 
-  const user =
-    db.users.find(
-      x =>
-        x.id ===
-        session.userId
-    );
+  const user = db.users.find(
+    u => u.id === session.userId
+  );
 
   if (!user) {
-    return res
-      .status(401)
-      .json({
-        error: "LOGIN_REQUIRED"
-      });
+    return res.status(401).json({
+      error: "LOGIN_REQUIRED"
+    });
   }
 
   req.user = user;
@@ -249,334 +209,281 @@ function requireUser(
   next();
 }
 
-function requireAdmin(
-  req,
-  res,
-  next
-) {
-  const session =
-    getSession(req);
+function requireAdmin(req, res, next) {
+  const session = getSession(req);
 
-  if (
-    !session ||
-    session.role !== "admin"
-  ) {
-    return res
-      .status(401)
-      .json({
-        error: "ADMIN_REQUIRED"
-      });
+  if (!session || session.role !== "admin") {
+    return res.status(401).json({
+      error: "ADMIN_REQUIRED"
+    });
   }
 
   next();
 }
 
 /* =========================
-   EXPRESS
-========================= */
-
-app.use(
-  express.json({
-    limit: "1mb"
-  })
-);
-
-app.use(
-  express.urlencoded({
-    extended: true
-  })
-);
-
-/* =========================
-   FILE UPLOAD
+   UPLOAD
 ========================= */
 
 const upload = multer({
-  dest: UPLOADS,
-
+  dest: UPLOAD_DIR,
   limits: {
-    fileSize:
-      5 * 1024 * 1024
+    fileSize: 5 * 1024 * 1024
   },
-
-  fileFilter: (
-    req,
-    file,
-    cb
-  ) => {
-    cb(
-      null,
-      /^image\/(png|jpe?g|webp|gif)$/.test(
+  fileFilter: (req, file, cb) => {
+    const allowed =
+      /^image\/(png|jpe?g|webp|gif)$/i.test(
         file.mimetype
-      )
-    );
+      );
+
+    cb(null, allowed);
   }
 });
 
 /* =========================
-   HEALTH
+   HEALTH / TEST
 ========================= */
 
-app.get(
-  "/health",
-  (req, res) => {
-    res.json({
-      ok: true,
-      service: "GoldAI"
-    });
-  }
-);
+app.get("/", (req, res) => {
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online"
+  });
+});
+
+app.get("/api", (req, res) => {
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online"
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online"
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online"
+  });
+});
 
 /* =========================
    REGISTER
 ========================= */
 
-app.post(
-  "/api/register",
-  (req, res) => {
-    try {
-      const {
-        name,
-        email,
-        password
-      } = req.body || {};
+app.post("/api/register", (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      password
+    } = req.body || {};
 
-      if (
-        !name ||
-        !email ||
-        !password ||
-        String(password).length < 6
-      ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Enter name, valid email and password (6+ characters)."
-          });
-      }
-
-      const normalizedEmail =
-        String(email)
-          .trim()
-          .toLowerCase();
-
-      if (
-        db.users.some(
-          user =>
-            user.email ===
-            normalizedEmail
-        )
-      ) {
-        return res
-          .status(409)
-          .json({
-            error:
-              "An account with this email already exists."
-          });
-      }
-
-      const passwordData =
-        hashPassword(
-          String(password)
-        );
-
-      const user = {
-        id: makeId(),
-        name: String(name)
-          .trim()
-          .slice(0, 80),
-        email:
-          normalizedEmail,
-        password:
-          passwordData,
-        approved: false,
-        createdAt:
-          new Date().toISOString()
-      };
-
-      db.users.push(user);
-
-      save();
-
-      setSessionCookie(
-        res,
-        createToken(
-          user.id,
-          "user"
-        )
-      );
-
-      return res.json({
-        ok: true,
-        user: {
-          name: user.name,
-          email: user.email,
-          approved:
-            user.approved
-        }
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        error: "Name, email and password are required."
       });
-    } catch (error) {
-      console.error(
-        "REGISTER ERROR:",
-        error
-      );
-
-      return res
-        .status(500)
-        .json({
-          error:
-            "Registration failed."
-        });
     }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({
+        error: "Password must be at least 6 characters."
+      });
+    }
+
+    const cleanEmail =
+      String(email).trim().toLowerCase();
+
+    const existing = db.users.find(
+      u => u.email === cleanEmail
+    );
+
+    if (existing) {
+      return res.status(409).json({
+        error:
+          "An account with this email already exists."
+      });
+    }
+
+    const passwordData = hashPassword(
+      String(password)
+    );
+
+    const user = {
+      id: createId(),
+      name: String(name)
+        .trim()
+        .slice(0, 80),
+
+      email: cleanEmail,
+
+      password: passwordData,
+
+      approved: false,
+
+      createdAt:
+        new Date().toISOString()
+    };
+
+    db.users.push(user);
+
+    if (!saveDB()) {
+      return res.status(500).json({
+        error: "Could not save account."
+      });
+    }
+
+    setSessionCookie(
+      res,
+      createToken(user.id, "user")
+    );
+
+    return res.json({
+      ok: true,
+      user: {
+        name: user.name,
+        email: user.email,
+        approved: user.approved
+      }
+    });
+
+  } catch (error) {
+    console.error(
+      "REGISTER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Registration failed."
+    });
   }
-);
+});
 
 /* =========================
    LOGIN
 ========================= */
 
-app.post(
-  "/api/login",
-  (req, res) => {
-    try {
-      const {
-        email,
-        password
-      } = req.body || {};
+app.post("/api/login", (req, res) => {
+  try {
+    const {
+      email,
+      password
+    } = req.body || {};
 
-      const user =
-        db.users.find(
-          x =>
-            x.email ===
-            String(
-              email || ""
-            )
-              .trim()
-              .toLowerCase()
-        );
+    const cleanEmail =
+      String(email || "")
+        .trim()
+        .toLowerCase();
 
-      if (
-        !user ||
-        !checkPassword(
-          String(
-            password || ""
-          ),
-          user.password
-        )
-      ) {
-        return res
-          .status(401)
-          .json({
-            error:
-              "Invalid email or password."
-          });
-      }
+    const user = db.users.find(
+      u => u.email === cleanEmail
+    );
 
-      setSessionCookie(
-        res,
-        createToken(
-          user.id,
-          "user"
-        )
-      );
-
-      return res.json({
-        ok: true,
-        user: {
-          name: user.name,
-          email: user.email,
-          approved:
-            user.approved
-        }
+    if (
+      !user ||
+      !checkPassword(
+        String(password || ""),
+        user.password
+      )
+    ) {
+      return res.status(401).json({
+        error: "Invalid email or password."
       });
-    } catch (error) {
-      console.error(
-        "LOGIN ERROR:",
-        error
-      );
-
-      return res
-        .status(500)
-        .json({
-          error:
-            "Login failed."
-        });
     }
+
+    setSessionCookie(
+      res,
+      createToken(user.id, "user")
+    );
+
+    return res.json({
+      ok: true,
+      user: {
+        name: user.name,
+        email: user.email,
+        approved: user.approved
+      }
+    });
+
+  } catch (error) {
+    console.error(
+      "LOGIN ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Login failed."
+    });
   }
-);
+});
 
 /* =========================
    LOGOUT
 ========================= */
 
-app.post(
-  "/api/logout",
-  (req, res) => {
-    res.setHeader(
-      "Set-Cookie",
-      "goldai_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"
-    );
+app.post("/api/logout", (req, res) => {
+  res.setHeader(
+    "Set-Cookie",
+    "goldai_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"
+  );
 
-    res.json({
-      ok: true
-    });
-  }
-);
+  res.json({
+    ok: true
+  });
+});
 
 /* =========================
    CURRENT USER
 ========================= */
 
-app.get(
-  "/api/me",
-  (req, res) => {
-    const session =
-      getSession(req);
+app.get("/api/me", (req, res) => {
+  const session = getSession(req);
 
-    if (!session) {
-      return res.json({
-        loggedIn: false
-      });
-    }
-
-    if (
-      session.role ===
-      "admin"
-    ) {
-      return res.json({
-        loggedIn: true,
-        role: "admin"
-      });
-    }
-
-    const user =
-      db.users.find(
-        x =>
-          x.id ===
-          session.userId
-      );
-
-    if (!user) {
-      return res.json({
-        loggedIn: false
-      });
-    }
-
-    res.json({
-      loggedIn: true,
-      role: "user",
-      user: {
-        name: user.name,
-        email: user.email,
-        approved:
-          user.approved
-      }
+  if (!session) {
+    return res.json({
+      loggedIn: false
     });
   }
-);
+
+  if (session.role === "admin") {
+    return res.json({
+      loggedIn: true,
+      role: "admin"
+    });
+  }
+
+  const user = db.users.find(
+    u => u.id === session.userId
+  );
+
+  if (!user) {
+    return res.json({
+      loggedIn: false
+    });
+  }
+
+  res.json({
+    loggedIn: true,
+    role: "user",
+    user: {
+      name: user.name,
+      email: user.email,
+      approved: user.approved
+    }
+  });
+});
 
 /* =========================
-   PAYMENT
+   PAYMENTS
 ========================= */
 
 app.post(
@@ -585,119 +492,96 @@ app.post(
   upload.single("receipt"),
   (req, res) => {
     try {
-      const method =
-        req.body.method;
+      const method = req.body.method;
 
       if (
-        ![
-          "hesabpay",
-          "binance"
-        ].includes(method)
+        !["hesabpay", "binance"].includes(
+          method
+        )
       ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Invalid payment method."
-          });
+        return res.status(400).json({
+          error: "Invalid payment method."
+        });
       }
 
-      if (
-        !req.body.reference
-      ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Payment reference is required."
-          });
+      if (!req.body.reference) {
+        return res.status(400).json({
+          error:
+            "Payment reference is required."
+        });
       }
 
       if (!req.file) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Receipt image is required."
-          });
+        return res.status(400).json({
+          error:
+            "Receipt image is required."
+        });
       }
 
-      const existing =
-        db.payments.find(
-          p =>
-            p.userId ===
-              req.user.id &&
-            p.status ===
-              "pending"
-        );
+      const pending = db.payments.find(
+        p =>
+          p.userId === req.user.id &&
+          p.status === "pending"
+      );
 
-      if (existing) {
-        return res
-          .status(409)
-          .json({
-            error:
-              "You already have a payment waiting for review."
-          });
+      if (pending) {
+        return res.status(409).json({
+          error:
+            "You already have a payment waiting for review."
+        });
       }
 
       const payment = {
-        id: makeId(),
-        userId:
-          req.user.id,
+        id: createId(),
+
+        userId: req.user.id,
+
         method,
+
         amount:
-          method ===
-          "hesabpay"
+          method === "hesabpay"
             ? "240 AFN"
             : "4 USD / USDT",
-        reference:
-          String(
-            req.body
-              .reference
-          )
-            .trim()
-            .slice(
-              0,
-              120
-            ),
+
+        reference: String(
+          req.body.reference
+        )
+          .trim()
+          .slice(0, 120),
+
         receipt:
           "/receipts/" +
-          path.basename(
-            req.file.path
-          ),
-        status:
-          "pending",
+          path.basename(req.file.path),
+
+        status: "pending",
+
         createdAt:
           new Date().toISOString()
       };
 
-      db.payments.push(
-        payment
-      );
+      db.payments.push(payment);
 
-      save();
+      saveDB();
 
       res.json({
         ok: true
       });
+
     } catch (error) {
       console.error(
         "PAYMENT ERROR:",
         error
       );
 
-      res
-        .status(500)
-        .json({
-          error:
-            "Payment submission failed."
-        });
+      res.status(500).json({
+        error: "Payment submission failed."
+      });
     }
   }
 );
 
 /* =========================
-   ACCESS
+   USER ACCESS
 ========================= */
 
 app.get(
@@ -707,9 +591,7 @@ app.get(
     const payments =
       db.payments
         .filter(
-          p =>
-            p.userId ===
-            req.user.id
+          p => p.userId === req.user.id
         )
         .sort(
           (a, b) =>
@@ -718,30 +600,26 @@ app.get(
             )
         );
 
-    const latest =
-      payments[0];
+    const latest = payments[0];
 
     const approved =
-      req.user.approved ===
-      true;
+      req.user.approved === true;
 
-    const signals =
-      approved
-        ? [
-            ...db.signals
-          ].sort(
-            (a, b) =>
-              b.createdAt.localeCompare(
-                a.createdAt
-              )
-          )
-        : [];
+    const signals = approved
+      ? [...db.signals].sort(
+          (a, b) =>
+            b.createdAt.localeCompare(
+              a.createdAt
+            )
+        )
+      : [];
 
     res.json({
       approved,
+
       paymentStatus:
-        latest?.status ||
-        "none",
+        latest?.status || "none",
+
       signals
     });
   }
@@ -755,40 +633,31 @@ app.post(
   "/api/support",
   requireUser,
   (req, res) => {
-    const {
-      message
-    } = req.body || {};
+    const message = req.body?.message;
 
     if (
       !message ||
-      String(message)
-        .trim()
-        .length < 2
+      String(message).trim().length < 2
     ) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Message required."
-        });
+      return res.status(400).json({
+        error: "Message required."
+      });
     }
 
     db.support.push({
-      id: makeId(),
-      userId:
-        req.user.id,
-      message:
-        String(message)
-          .trim()
-          .slice(
-            0,
-            2000
-          ),
+      id: createId(),
+
+      userId: req.user.id,
+
+      message: String(message)
+        .trim()
+        .slice(0, 2000),
+
       createdAt:
         new Date().toISOString()
     });
 
-    save();
+    saveDB();
 
     res.json({
       ok: true
@@ -803,19 +672,18 @@ app.post(
 app.post(
   "/api/admin/login",
   (req, res) => {
-    if (
+    const password =
       String(
-        req.body.password ||
-          ""
-      ) !==
-      ADMIN_PASSWORD
+        req.body?.password || ""
+      );
+
+    if (
+      password !== ADMIN_PASSWORD
     ) {
-      return res
-        .status(401)
-        .json({
-          error:
-            "Invalid admin password."
-        });
+      return res.status(401).json({
+        error:
+          "Invalid admin password."
+      });
     }
 
     setSessionCookie(
@@ -841,63 +709,44 @@ app.get(
   requireAdmin,
   (req, res) => {
     res.json({
-      users:
-        db.users.map(
-          user => ({
-            id: user.id,
-            name: user.name,
-            email:
-              user.email,
-            approved:
-              user.approved,
-            createdAt:
-              user.createdAt
-          })
-        ),
+      users: db.users.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        approved: u.approved,
+        createdAt: u.createdAt
+      })),
 
-      payments:
-        db.payments.map(
-          payment => ({
-            ...payment,
-            userEmail:
-              db.users.find(
-                user =>
-                  user.id ===
-                  payment.userId
-              )?.email ||
-              "Unknown",
-            userName:
-              db.users.find(
-                user =>
-                  user.id ===
-                  payment.userId
-              )?.name ||
-              "Unknown"
-          })
-        ),
+      payments: db.payments.map(p => ({
+        ...p,
 
-      signals:
-        db.signals,
+        userEmail:
+          db.users.find(
+            u => u.id === p.userId
+          )?.email || "Unknown",
 
-      support:
-        db.support.map(
-          item => ({
-            ...item,
-            userEmail:
-              db.users.find(
-                user =>
-                  user.id ===
-                  item.userId
-              )?.email ||
-              "Unknown"
-          })
-        )
+        userName:
+          db.users.find(
+            u => u.id === p.userId
+          )?.name || "Unknown"
+      })),
+
+      signals: db.signals,
+
+      support: db.support.map(s => ({
+        ...s,
+
+        userEmail:
+          db.users.find(
+            u => u.id === s.userId
+          )?.email || "Unknown"
+      }))
     });
   }
 );
 
 /* =========================
-   APPROVE PAYMENT
+   ADMIN PAYMENT APPROVE
 ========================= */
 
 app.post(
@@ -906,39 +755,31 @@ app.post(
   (req, res) => {
     const payment =
       db.payments.find(
-        x =>
-          x.id ===
+        p =>
+          p.id ===
           req.params.paymentId
       );
 
     if (!payment) {
-      return res
-        .status(404)
-        .json({
-          error:
-            "Payment not found."
-        });
+      return res.status(404).json({
+        error: "Payment not found."
+      });
     }
 
-    payment.status =
-      "approved";
+    payment.status = "approved";
 
     payment.reviewedAt =
       new Date().toISOString();
 
-    const user =
-      db.users.find(
-        x =>
-          x.id ===
-          payment.userId
-      );
+    const user = db.users.find(
+      u => u.id === payment.userId
+    );
 
     if (user) {
-      user.approved =
-        true;
+      user.approved = true;
     }
 
-    save();
+    saveDB();
 
     res.json({
       ok: true
@@ -947,7 +788,7 @@ app.post(
 );
 
 /* =========================
-   REJECT PAYMENT
+   ADMIN PAYMENT REJECT
 ========================= */
 
 app.post(
@@ -956,39 +797,31 @@ app.post(
   (req, res) => {
     const payment =
       db.payments.find(
-        x =>
-          x.id ===
+        p =>
+          p.id ===
           req.params.paymentId
       );
 
     if (!payment) {
-      return res
-        .status(404)
-        .json({
-          error:
-            "Payment not found."
-        });
+      return res.status(404).json({
+        error: "Payment not found."
+      });
     }
 
-    payment.status =
-      "rejected";
+    payment.status = "rejected";
 
     payment.reviewedAt =
       new Date().toISOString();
 
-    const user =
-      db.users.find(
-        x =>
-          x.id ===
-          payment.userId
-      );
+    const user = db.users.find(
+      u => u.id === payment.userId
+    );
 
     if (user) {
-      user.approved =
-        false;
+      user.approved = false;
     }
 
-    save();
+    saveDB();
 
     res.json({
       ok: true
@@ -997,7 +830,7 @@ app.post(
 );
 
 /* =========================
-   ADD SIGNAL
+   ADMIN SIGNALS
 ========================= */
 
 app.post(
@@ -1010,34 +843,28 @@ app.post(
     } = req.body || {};
 
     if (!body) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Signal body required."
-        });
+      return res.status(400).json({
+        error:
+          "Signal body required."
+      });
     }
 
     db.signals.push({
-      id: makeId(),
+      id: createId(),
+
       title: String(
         title ||
           "XAUUSD Signal"
-      ).slice(
-        0,
-        120
-      ),
-      body: String(
-        body
-      ).slice(
-        0,
-        5000
-      ),
+      ).slice(0, 120),
+
+      body: String(body)
+        .slice(0, 5000),
+
       createdAt:
         new Date().toISOString()
     });
 
-    save();
+    saveDB();
 
     res.json({
       ok: true
@@ -1060,7 +887,7 @@ app.delete(
           req.params.id
       );
 
-    save();
+    saveDB();
 
     res.json({
       ok: true
@@ -1069,7 +896,7 @@ app.delete(
 );
 
 /* =========================
-   VERCEL EXPORT
+   EXPORT FOR VERCEL
 ========================= */
 
 module.exports = app;
