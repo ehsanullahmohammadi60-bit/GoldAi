@@ -12,15 +12,22 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const SESSION_SECRET =
-  process.env.SESSION_SECRET || "goldai-change-this-secret";
+  process.env.SESSION_SECRET ||
+  "goldai-change-this-secret";
 
 const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD || "change-admin-password";
+  process.env.ADMIN_PASSWORD ||
+  "change-admin-password";
 
 const AI_MODEL =
-  process.env.OPENAI_MODEL || "gpt-6-luna";
+  process.env.OPENAI_MODEL ||
+  "gpt-6-luna";
 
-const sql = DATABASE_URL ? neon(DATABASE_URL) : null;
+const sql =
+  DATABASE_URL
+    ? neon(DATABASE_URL)
+    : null;
+
 
 /* =========================================================
    DATABASE
@@ -29,12 +36,17 @@ const sql = DATABASE_URL ? neon(DATABASE_URL) : null;
 let dbReadyPromise = null;
 
 async function ensureDatabase() {
+
   if (!sql) {
-    throw new Error("DATABASE_URL is not configured.");
+    throw new Error(
+      "DATABASE_URL is not configured."
+    );
   }
 
   if (!dbReadyPromise) {
+
     dbReadyPromise = (async () => {
+
       await sql`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -101,35 +113,58 @@ async function ensureDatabase() {
           created_at TIMESTAMP DEFAULT NOW()
         )
       `;
+
     })();
   }
 
   return dbReadyPromise;
 }
 
-app.use(async (req, res, next) => {
-  try {
-    await ensureDatabase();
-    next();
-  } catch (error) {
-    console.error("DATABASE ERROR:", error);
 
-    res.status(500).json({
-      error: "Database connection failed."
-    });
+app.use(
+  async (req, res, next) => {
+
+    try {
+
+      await ensureDatabase();
+
+      next();
+
+    } catch (error) {
+
+      console.error(
+        "DATABASE ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Database connection failed."
+      });
+    }
   }
-});
+);
+
 
 /* =========================================================
    PASSWORD
 ========================================================= */
 
 function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
 
-  const hash = crypto
-    .scryptSync(password, salt, 64)
-    .toString("hex");
+  const salt =
+    crypto
+      .randomBytes(16)
+      .toString("hex");
+
+  const hash =
+    crypto
+      .scryptSync(
+        password,
+        salt,
+        64
+      )
+      .toString("hex");
 
   return {
     salt,
@@ -137,20 +172,31 @@ function hashPassword(password) {
   };
 }
 
-function checkPassword(password, stored) {
+
+function checkPassword(
+  password,
+  stored
+) {
+
   try {
-    const calculated = crypto.scryptSync(
-      password,
-      stored.salt,
-      64
-    );
 
-    const original = Buffer.from(
-      stored.hash,
-      "hex"
-    );
+    const calculated =
+      crypto.scryptSync(
+        password,
+        stored.salt,
+        64
+      );
 
-    if (calculated.length !== original.length) {
+    const original =
+      Buffer.from(
+        stored.hash,
+        "hex"
+      );
+
+    if (
+      calculated.length !==
+      original.length
+    ) {
       return false;
     }
 
@@ -158,69 +204,105 @@ function checkPassword(password, stored) {
       calculated,
       original
     );
+
   } catch {
+
     return false;
   }
 }
+
 
 /* =========================================================
    SESSION
 ========================================================= */
 
-function createToken(userId, role = "user") {
+function createToken(
+  userId,
+  role = "user"
+) {
+
   const payload = {
     userId,
     role,
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+    exp:
+      Date.now() +
+      7 * 24 * 60 * 60 * 1000
   };
 
-  const encoded = Buffer
-    .from(JSON.stringify(payload))
-    .toString("base64url");
+  const encoded =
+    Buffer
+      .from(
+        JSON.stringify(payload)
+      )
+      .toString("base64url");
 
-  const signature = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(encoded)
-    .digest("base64url");
+  const signature =
+    crypto
+      .createHmac(
+        "sha256",
+        SESSION_SECRET
+      )
+      .update(encoded)
+      .digest("base64url");
 
   return `${encoded}.${signature}`;
 }
 
+
 function getCookieToken(req) {
+
   const cookieHeader =
     req.headers.cookie || "";
 
   const cookies = {};
 
-  cookieHeader.split(";").forEach((part) => {
-    const index = part.indexOf("=");
+  cookieHeader
+    .split(";")
+    .forEach((part) => {
 
-    if (index === -1) return;
+      const index =
+        part.indexOf("=");
 
-    const key =
-      part.slice(0, index).trim();
+      if (index === -1) {
+        return;
+      }
 
-    const value =
-      part.slice(index + 1).trim();
+      const key =
+        part
+          .slice(0, index)
+          .trim();
 
-    cookies[key] = value;
-  });
+      const value =
+        part
+          .slice(index + 1)
+          .trim();
 
-  if (!cookies.goldai_session) {
+      cookies[key] = value;
+    });
+
+  if (
+    !cookies.goldai_session
+  ) {
     return null;
   }
 
   try {
+
     return decodeURIComponent(
       cookies.goldai_session
     );
+
   } catch {
+
     return cookies.goldai_session;
   }
 }
 
+
 function getSession(req) {
+
   try {
+
     const token =
       getCookieToken(req);
 
@@ -231,7 +313,9 @@ function getSession(req) {
     const parts =
       token.split(".");
 
-    if (parts.length !== 2) {
+    if (
+      parts.length !== 2
+    ) {
       return null;
     }
 
@@ -273,15 +357,18 @@ function getSession(req) {
 
     const payload =
       JSON.parse(
-        Buffer.from(
-          encoded,
-          "base64url"
-        ).toString("utf8")
+        Buffer
+          .from(
+            encoded,
+            "base64url"
+          )
+          .toString("utf8")
       );
 
     if (
       !payload.exp ||
-      Date.now() > payload.exp
+      Date.now() >
+        payload.exp
     ) {
       return null;
     }
@@ -289,6 +376,7 @@ function getSession(req) {
     return payload;
 
   } catch (error) {
+
     console.error(
       "SESSION ERROR:",
       error
@@ -298,17 +386,21 @@ function getSession(req) {
   }
 }
 
+
 function setSessionCookie(
   req,
   res,
   token
 ) {
+
   const forwardedProto =
-    req.headers["x-forwarded-proto"] ||
-    "";
+    req.headers[
+      "x-forwarded-proto"
+    ] || "";
 
   const secure =
-    forwardedProto === "https"
+    forwardedProto ===
+    "https"
       ? "; Secure"
       : "";
 
@@ -320,16 +412,20 @@ function setSessionCookie(
   );
 }
 
+
 function clearSessionCookie(
   req,
   res
 ) {
+
   const forwardedProto =
-    req.headers["x-forwarded-proto"] ||
-    "";
+    req.headers[
+      "x-forwarded-proto"
+    ] || "";
 
   const secure =
-    forwardedProto === "https"
+    forwardedProto ===
+    "https"
       ? "; Secure"
       : "";
 
@@ -339,11 +435,13 @@ function clearSessionCookie(
   );
 }
 
+
 /* =========================================================
    USER
 ========================================================= */
 
 function formatUser(row) {
+
   if (!row) {
     return null;
   }
@@ -352,42 +450,57 @@ function formatUser(row) {
     id: row.id,
     name: row.name,
     email: row.email,
-    approved: Boolean(row.approved),
-    emailVerified: Boolean(
-      row.email_verified
-    ),
-    createdAt: row.created_at
+    approved:
+      Boolean(
+        row.approved
+      ),
+    emailVerified:
+      Boolean(
+        row.email_verified
+      ),
+    createdAt:
+      row.created_at
   };
 }
+
 
 async function requireUser(
   req,
   res,
   next
 ) {
+
   try {
+
     const session =
       getSession(req);
 
     if (
       !session ||
-      session.role !== "user"
+      session.role !==
+        "user"
     ) {
+
       return res.status(401).json({
-        error: "Not authenticated."
+        error:
+          "Not authenticated."
       });
     }
 
-    const rows = await sql`
-      SELECT *
-      FROM users
-      WHERE id = ${session.userId}
-      LIMIT 1
-    `;
+    const rows =
+      await sql`
+        SELECT *
+        FROM users
+        WHERE id =
+          ${session.userId}
+        LIMIT 1
+      `;
 
     if (!rows.length) {
+
       return res.status(401).json({
-        error: "User not found."
+        error:
+          "User not found."
       });
     }
 
@@ -397,30 +510,90 @@ async function requireUser(
     next();
 
   } catch (error) {
+
     console.error(
       "AUTH ERROR:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       error:
         "Authentication failed."
     });
   }
 }
 
+
+/*
+  مهم‌ترین محافظ سایت:
+
+  فقط کاربرانی که approved=true دارند
+  اجازه استفاده از قابلیت‌های پولی را دارند.
+*/
+
+async function requireApprovedUser(
+  req,
+  res,
+  next
+) {
+
+  try {
+
+    await requireUser(
+      req,
+      res,
+      () => {}
+    );
+
+    if (
+      res.headersSent
+    ) {
+      return;
+    }
+
+    if (
+      !req.user ||
+      !req.user.approved
+    ) {
+
+      return res.status(403).json({
+        error:
+          "Payment approval is required before using this feature."
+      });
+    }
+
+    next();
+
+  } catch (error) {
+
+    console.error(
+      "APPROVED USER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      error:
+        "Access verification failed."
+    });
+  }
+}
+
+
 function requireAdmin(
   req,
   res,
   next
 ) {
+
   const session =
     getSession(req);
 
   if (
     !session ||
-    session.role !== "admin"
+    session.role !==
+      "admin"
   ) {
+
     return res.status(401).json({
       error:
         "Admin authentication required."
@@ -430,64 +603,80 @@ function requireAdmin(
   next();
 }
 
+
 /* =========================================================
    UPLOAD
 ========================================================= */
 
-const upload = multer({
-  storage:
-    multer.memoryStorage(),
+const upload =
+  multer({
 
-  limits: {
-    fileSize:
-      5 * 1024 * 1024
-  },
+    storage:
+      multer.memoryStorage(),
 
-  fileFilter: (
-    req,
-    file,
-    cb
-  ) => {
-    const allowed = [
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-      "image/gif"
-    ];
+    limits: {
+      fileSize:
+        5 * 1024 * 1024
+    },
 
-    if (
-      !allowed.includes(
-        file.mimetype
-      )
-    ) {
-      return cb(
-        new Error(
-          "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
-        )
-      );
-    }
+    fileFilter:
+      (
+        req,
+        file,
+        cb
+      ) => {
 
-    cb(null, true);
-  }
-});
+        const allowed = [
+          "image/png",
+          "image/jpeg",
+          "image/webp",
+          "image/gif"
+        ];
+
+        if (
+          !allowed.includes(
+            file.mimetype
+          )
+        ) {
+
+          return cb(
+            new Error(
+              "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
+            )
+          );
+        }
+
+        cb(
+          null,
+          true
+        );
+      }
+  });
+
 
 /* =========================================================
    HEALTH
 ========================================================= */
 
-app.get("/", (req, res) => {
-  res.json({
-    ok: true,
-    service:
-      "GoldAI API",
-    status:
-      "online"
-  });
-});
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+      ok: true,
+      service:
+        "GoldAI API",
+      status:
+        "online"
+    });
+  }
+);
+
 
 app.get(
   "/api",
   (req, res) => {
+
     res.json({
       ok: true,
       service:
@@ -505,10 +694,12 @@ app.get(
     });
   }
 );
+
 
 app.get(
   "/api/health",
   (req, res) => {
+
     res.json({
       ok: true,
       service:
@@ -527,9 +718,11 @@ app.get(
   }
 );
 
+
 app.get(
   "/health",
   (req, res) => {
+
     res.json({
       ok: true,
       status:
@@ -538,6 +731,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    REGISTER
 ========================================================= */
@@ -545,30 +739,39 @@ app.get(
 app.post(
   "/api/register",
   async (req, res) => {
+
     try {
+
       const {
         name,
         email,
         password
-      } = req.body || {};
+      } =
+        req.body || {};
 
       const cleanName =
-        String(name || "")
-          .trim();
+        String(
+          name || ""
+        ).trim();
 
       const cleanEmail =
-        String(email || "")
+        String(
+          email || ""
+        )
           .trim()
           .toLowerCase();
 
       const cleanPassword =
-        String(password || "");
+        String(
+          password || ""
+        );
 
       if (
         !cleanName ||
         !cleanEmail ||
         !cleanPassword
       ) {
+
         return res.status(400).json({
           error:
             "Name, email and password are required."
@@ -578,6 +781,7 @@ app.post(
       if (
         cleanPassword.length < 6
       ) {
+
         return res.status(400).json({
           error:
             "Password must be at least 6 characters."
@@ -588,11 +792,13 @@ app.post(
         await sql`
           SELECT id
           FROM users
-          WHERE email = ${cleanEmail}
+          WHERE email =
+            ${cleanEmail}
           LIMIT 1
         `;
 
       if (existing.length) {
+
         return res.status(409).json({
           error:
             "An account with this email already exists."
@@ -653,6 +859,7 @@ app.post(
       });
 
     } catch (error) {
+
       console.error(
         "REGISTER ERROR:",
         error
@@ -666,6 +873,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    LOGIN
 ========================================================= */
@@ -673,24 +881,32 @@ app.post(
 app.post(
   "/api/login",
   async (req, res) => {
+
     try {
+
       const {
         email,
         password
-      } = req.body || {};
+      } =
+        req.body || {};
 
       const cleanEmail =
-        String(email || "")
+        String(
+          email || ""
+        )
           .trim()
           .toLowerCase();
 
       const cleanPassword =
-        String(password || "");
+        String(
+          password || ""
+        );
 
       if (
         !cleanEmail ||
         !cleanPassword
       ) {
+
         return res.status(400).json({
           error:
             "Email and password are required."
@@ -701,7 +917,8 @@ app.post(
         await sql`
           SELECT *
           FROM users
-          WHERE email = ${cleanEmail}
+          WHERE email =
+            ${cleanEmail}
           LIMIT 1
         `;
 
@@ -720,22 +937,20 @@ app.post(
           }
         )
       ) {
+
         return res.status(401).json({
           error:
             "Invalid email or password."
         });
       }
 
-      const token =
-        createToken(
-          user.id,
-          "user"
-        );
-
       setSessionCookie(
         req,
         res,
-        token
+        createToken(
+          user.id,
+          "user"
+        )
       );
 
       res.setHeader(
@@ -754,6 +969,7 @@ app.post(
       });
 
     } catch (error) {
+
       console.error(
         "LOGIN ERROR:",
         error
@@ -767,6 +983,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    LOGOUT
 ========================================================= */
@@ -774,6 +991,7 @@ app.post(
 app.post(
   "/api/logout",
   (req, res) => {
+
     clearSessionCookie(
       req,
       res
@@ -792,6 +1010,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    CURRENT USER
 ========================================================= */
@@ -799,7 +1018,9 @@ app.post(
 app.get(
   "/api/me",
   async (req, res) => {
+
     try {
+
       res.setHeader(
         "Cache-Control",
         "no-store"
@@ -809,6 +1030,7 @@ app.get(
         getSession(req);
 
       if (!session) {
+
         return res.json({
           loggedIn:
             false
@@ -819,6 +1041,7 @@ app.get(
         session.role ===
         "admin"
       ) {
+
         return res.json({
           loggedIn:
             true,
@@ -831,11 +1054,13 @@ app.get(
         await sql`
           SELECT *
           FROM users
-          WHERE id = ${session.userId}
+          WHERE id =
+            ${session.userId}
           LIMIT 1
         `;
 
       if (!rows.length) {
+
         clearSessionCookie(
           req,
           res
@@ -859,6 +1084,7 @@ app.get(
       });
 
     } catch (error) {
+
       console.error(
         "ME ERROR:",
         error
@@ -872,6 +1098,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    PAYMENT
 ========================================================= */
@@ -880,14 +1107,48 @@ async function handlePayment(
   req,
   res
 ) {
+
   try {
+
+    /*
+      کاربری که قبلاً تأیید شده است
+      دیگر نباید گزینه پرداخت جدید داشته باشد.
+    */
+
+    if (
+      req.user.approved
+    ) {
+
+      return res.status(409).json({
+        error:
+          "Your account is already approved."
+      });
+    }
+
     const {
       method,
       amount,
       reference
-    } = req.body || {};
+    } =
+      req.body || {};
+
+    const cleanReference =
+      String(
+        reference || ""
+      ).trim();
+
+    if (
+      !cleanReference
+    ) {
+
+      return res.status(400).json({
+        error:
+          "Payment reference is required."
+      });
+    }
 
     if (!req.file) {
+
       return res.status(400).json({
         error:
           "Receipt image is required."
@@ -895,7 +1156,9 @@ async function handlePayment(
     }
 
     const cleanMethod =
-      String(method || "")
+      String(
+        method || ""
+      )
         .trim()
         .toLowerCase();
 
@@ -905,11 +1168,49 @@ async function handlePayment(
       cleanMethod !==
         "binance"
     ) {
+
       return res.status(400).json({
         error:
           "Invalid payment method."
       });
     }
+
+    /*
+      جلوگیری از ارسال بی‌نهایت رسید
+      در حالی که رسید قبلی هنوز pending است.
+    */
+
+    const pending =
+      await sql`
+        SELECT id
+        FROM payments
+        WHERE user_id =
+          ${req.user.id}
+        AND status =
+          'pending'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+
+    if (pending.length) {
+
+      return res.status(409).json({
+        error:
+          "You already have a payment waiting for approval."
+      });
+    }
+
+    const expectedAmount =
+      cleanMethod ===
+        "binance"
+        ? "4"
+        : "240";
+
+    /*
+      مقدار پرداخت از سمت Frontend
+      قابل اعتماد نیست.
+      Backend مقدار صحیح روش را ثبت می‌کند.
+    */
 
     const receiptData =
       req.file.buffer.toString(
@@ -930,12 +1231,8 @@ async function handlePayment(
         VALUES (
           ${req.user.id},
           ${cleanMethod},
-          ${String(
-            amount || ""
-          )},
-          ${String(
-            reference || ""
-          )},
+          ${expectedAmount},
+          ${cleanReference},
           ${receiptData},
           ${req.file.mimetype},
           'pending'
@@ -952,11 +1249,14 @@ async function handlePayment(
 
     return res.json({
       ok: true,
+      message:
+        "Payment receipt submitted and is waiting for approval.",
       payment:
         rows[0]
     });
 
   } catch (error) {
+
     console.error(
       "PAYMENT ERROR:",
       error
@@ -969,6 +1269,7 @@ async function handlePayment(
   }
 }
 
+
 app.post(
   "/api/payments",
   requireUser,
@@ -977,6 +1278,7 @@ app.post(
   ),
   handlePayment
 );
+
 
 app.post(
   "/api/payment",
@@ -987,6 +1289,7 @@ app.post(
   handlePayment
 );
 
+
 /* =========================================================
    ACCESS
 ========================================================= */
@@ -995,16 +1298,94 @@ app.get(
   "/api/access",
   requireUser,
   async (req, res) => {
+
     try {
+
       const payments =
         await sql`
-          SELECT *
+          SELECT
+            id,
+            method,
+            amount,
+            reference,
+            status,
+            created_at,
+            reviewed_at
           FROM payments
           WHERE user_id =
             ${req.user.id}
           ORDER BY created_at DESC
           LIMIT 20
         `;
+
+      /*
+        اطلاعات سیگنال فقط بعد از تأیید
+        به کاربر برگردانده می‌شود.
+      */
+
+      let signals = [];
+
+      if (
+        req.user.approved
+      ) {
+
+        signals =
+          await sql`
+            SELECT
+              id,
+              title,
+              body,
+              created_at
+            FROM signals
+            ORDER BY created_at DESC
+            LIMIT 50
+          `;
+      }
+
+      return res.json({
+        ok: true,
+
+        approved:
+          Boolean(
+            req.user.approved
+          ),
+
+        paymentStatus:
+          payments[0]?.status ||
+          null,
+
+        payments,
+
+        signals
+      });
+
+    } catch (error) {
+
+      console.error(
+        "ACCESS ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Could not load access information."
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   SIGNALS
+   فقط کاربران تأییدشده
+========================================================= */
+
+app.get(
+  "/api/signals",
+  requireApprovedUser,
+  async (req, res) => {
+
+    try {
 
       const signals =
         await sql`
@@ -1020,40 +1401,37 @@ app.get(
 
       return res.json({
         ok: true,
-        approved:
-          Boolean(
-            req.user.approved
-          ),
-        paymentStatus:
-          payments[0]?.status ||
-          null,
-        payments,
         signals
       });
 
     } catch (error) {
+
       console.error(
-        "ACCESS ERROR:",
+        "SIGNALS ERROR:",
         error
       );
 
       return res.status(500).json({
         error:
-          "Could not load access information."
+          "Could not load signals."
       });
     }
   }
 );
 
+
 /* =========================================================
    SUPPORT
+   فقط کاربران تأییدشده
 ========================================================= */
 
 app.post(
   "/api/support",
-  requireUser,
+  requireApprovedUser,
   async (req, res) => {
+
     try {
+
       const message =
         String(
           req.body?.message ||
@@ -1061,9 +1439,21 @@ app.post(
         ).trim();
 
       if (!message) {
+
         return res.status(400).json({
           error:
             "Message is required."
+        });
+      }
+
+      if (
+        message.length >
+        3000
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Message is too long."
         });
       }
 
@@ -1077,16 +1467,23 @@ app.post(
             ${req.user.id},
             ${message}
           )
-          RETURNING *
+          RETURNING
+            id,
+            user_id,
+            message,
+            created_at
         `;
 
       return res.json({
         ok: true,
+        message:
+          "Support message sent.",
         support:
           rows[0]
       });
 
     } catch (error) {
+
       console.error(
         "SUPPORT ERROR:",
         error
@@ -1100,6 +1497,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    AI HELPERS
 ========================================================= */
@@ -1107,15 +1505,18 @@ app.post(
 function cleanJsonText(
   text
 ) {
+
   let value =
-    String(text || "")
-      .trim();
+    String(
+      text || ""
+    ).trim();
 
   if (
     value.startsWith(
       "```"
     )
   ) {
+
     value =
       value
         .replace(
@@ -1132,18 +1533,75 @@ function cleanJsonText(
   return value;
 }
 
+
+function findJsonObject(
+  text
+) {
+
+  const cleaned =
+    cleanJsonText(
+      text
+    );
+
+  try {
+
+    return JSON.parse(
+      cleaned
+    );
+
+  } catch (_) {}
+
+  const first =
+    cleaned.indexOf(
+      "{"
+    );
+
+  const last =
+    cleaned.lastIndexOf(
+      "}"
+    );
+
+  if (
+    first !== -1 &&
+    last !== -1 &&
+    last > first
+  ) {
+
+    const possible =
+      cleaned.slice(
+        first,
+        last + 1
+      );
+
+    try {
+
+      return JSON.parse(
+        possible
+      );
+
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+
 function normalizeDirection(
   value
 ) {
+
   const v =
-    String(value || "")
+    String(
+      value || ""
+    )
       .trim()
       .toUpperCase();
 
   if (
     v === "BUY" ||
     v === "LONG" ||
-    v.includes("خرید")
+    v.includes("خرید") ||
+    v.includes("شراء")
   ) {
     return "BUY";
   }
@@ -1151,7 +1609,8 @@ function normalizeDirection(
   if (
     v === "SELL" ||
     v === "SHORT" ||
-    v.includes("فروش")
+    v.includes("فروش") ||
+    v.includes("بيع")
   ) {
     return "SELL";
   }
@@ -1159,17 +1618,22 @@ function normalizeDirection(
   return "WAIT";
 }
 
+
 function normalizeConfidence(
   value
 ) {
+
   const v =
-    String(value || "")
+    String(
+      value || ""
+    )
       .trim()
       .toLowerCase();
 
   if (
     v === "high" ||
-    v.includes("بالا")
+    v.includes("بالا") ||
+    v.includes("مرتفع")
   ) {
     return "High";
   }
@@ -1184,11 +1648,15 @@ function normalizeConfidence(
   return "Low";
 }
 
+
 function normalizeTimeframe(
   value
 ) {
+
   const v =
-    String(value || "")
+    String(
+      value || ""
+    )
       .trim()
       .toLowerCase();
 
@@ -1222,16 +1690,21 @@ function normalizeTimeframe(
   return null;
 }
 
+
 function extractResponseText(
   data
 ) {
+
   if (
     data &&
     typeof data.output_text ===
       "string" &&
     data.output_text.trim()
   ) {
-    return data.output_text.trim();
+
+    return data
+      .output_text
+      .trim();
   }
 
   const chunks = [];
@@ -1241,9 +1714,12 @@ function extractResponseText(
       data?.output
     )
   ) {
+
     for (
-      const item of data.output
+      const item of
+        data.output
     ) {
+
       if (
         !Array.isArray(
           item?.content
@@ -1256,12 +1732,14 @@ function extractResponseText(
         const content of
           item.content
       ) {
+
         if (
           content?.type ===
             "output_text" &&
           typeof content.text ===
             "string"
         ) {
+
           chunks.push(
             content.text
           );
@@ -1270,53 +1748,19 @@ function extractResponseText(
     }
   }
 
-  return chunks.join("").trim();
+  return chunks
+    .join("")
+    .trim();
 }
 
-function findJsonObject(
-  text
-) {
-  const cleaned =
-    cleanJsonText(text);
-
-  try {
-    return JSON.parse(
-      cleaned
-    );
-  } catch (_) {}
-
-  const first =
-    cleaned.indexOf("{");
-
-  const last =
-    cleaned.lastIndexOf("}");
-
-  if (
-    first !== -1 &&
-    last !== -1 &&
-    last > first
-  ) {
-    const possible =
-      cleaned.slice(
-        first,
-        last + 1
-      );
-
-    try {
-      return JSON.parse(
-        possible
-      );
-    } catch (_) {}
-  }
-
-  return null;
-}
 
 function normalizeAnalysis(
   result,
   selectedTimeframe
 ) {
+
   return {
+
     symbol:
       "XAUUSD",
 
@@ -1387,21 +1831,26 @@ function normalizeAnalysis(
   };
 }
 
+
 /* =========================================================
-   OPENAI REQUEST
+   OPENAI
 ========================================================= */
 
 async function requestAIAnalysis(
   imageUrl,
   prompt
 ) {
+
   const response =
     await fetch(
       "https://api.openai.com/v1/responses",
       {
-        method: "POST",
+
+        method:
+          "POST",
 
         headers: {
+
           "Content-Type":
             "application/json",
 
@@ -1409,40 +1858,45 @@ async function requestAIAnalysis(
             `Bearer ${OPENAI_API_KEY}`
         },
 
-        body: JSON.stringify({
-          model:
-            AI_MODEL,
+        body:
+          JSON.stringify({
 
-          max_output_tokens:
-            1400,
+            model:
+              AI_MODEL,
 
-          input: [
-            {
-              role: "user",
+            max_output_tokens:
+              1600,
 
-              content: [
-                {
-                  type:
-                    "input_text",
+            input: [
+              {
 
-                  text:
-                    prompt
-                },
+                role:
+                  "user",
 
-                {
-                  type:
-                    "input_image",
+                content: [
 
-                  image_url:
-                    imageUrl,
+                  {
+                    type:
+                      "input_text",
 
-                  detail:
-                    "high"
-                }
-              ]
-            }
-          ]
-        })
+                    text:
+                      prompt
+                  },
+
+                  {
+                    type:
+                      "input_image",
+
+                    image_url:
+                      imageUrl,
+
+                    detail:
+                      "high"
+                  }
+                ]
+              }
+            ]
+          })
       }
     );
 
@@ -1452,11 +1906,14 @@ async function requestAIAnalysis(
   let data;
 
   try {
+
     data =
       JSON.parse(
         rawText
       );
+
   } catch (_) {
+
     data = {
       raw:
         rawText
@@ -1469,30 +1926,26 @@ async function requestAIAnalysis(
   };
 }
 
+
 /* =========================================================
    AI CHART ANALYSIS
+   فقط کاربران تأییدشده
 ========================================================= */
 
 app.post(
   "/api/analyze-chart",
-  requireUser,
+  requireApprovedUser,
   upload.single(
     "chart"
   ),
   async (req, res) => {
+
     try {
-      if (
-        !req.user.approved
-      ) {
-        return res.status(403).json({
-          error:
-            "Your account has not been approved yet."
-        });
-      }
 
       if (
         !OPENAI_API_KEY
       ) {
+
         return res.status(500).json({
           error:
             "OPENAI_API_KEY is not configured."
@@ -1500,6 +1953,7 @@ app.post(
       }
 
       if (!req.file) {
+
         return res.status(400).json({
           error:
             "Chart image is required."
@@ -1514,11 +1968,26 @@ app.post(
       if (
         !selectedTimeframe
       ) {
+
         return res.status(400).json({
           error:
             "Please select 1m, 5m or 15m timeframe."
         });
       }
+
+      const language =
+        ["fa", "en", "ar"].includes(
+          req.body?.language
+        )
+          ? req.body.language
+          : "fa";
+
+      const languageName =
+        language === "fa"
+          ? "Persian (Dari)"
+          : language === "ar"
+            ? "Arabic"
+            : "English";
 
       const base64 =
         req.file.buffer.toString(
@@ -1531,39 +2000,47 @@ app.post(
       const prompt = `
 You are GoldAI, an XAUUSD technical chart analyzer.
 
-The user has selected this timeframe:
+The user selected this timeframe:
 
 ${selectedTimeframe}
 
+The user's interface language is:
+
+${languageName}
+
 IMPORTANT:
-The selected timeframe is AUTHORITATIVE.
-Analyze the chart specifically for ${selectedTimeframe}.
-Do NOT replace it with another timeframe.
-Do NOT guess a different timeframe.
 
-The uploaded image should be treated as an XAUUSD chart screenshot.
+The selected timeframe is authoritative.
 
-Your task is to inspect ONLY what is visible in the chart.
+Analyze the chart specifically for:
+${selectedTimeframe}
+
+Do not replace it with another timeframe.
+
+Analyze ONLY information visible in the uploaded image.
 
 Look carefully at:
-- current visible price
+
+- visible XAUUSD price
 - candlestick structure
-- trend
-- support and resistance
+- market trend
+- support
+- resistance
 - visible indicators
 - momentum if visible
-- breakout or rejection if visible
+- breakout or rejection
 - market structure
-- nearby price levels
+- nearby visible price levels
 
 Do not invent indicators or information that cannot be seen.
 
 Return ONLY one valid JSON object.
+
 No markdown.
 No code fences.
-No text before or after JSON.
+No explanation outside JSON.
 
-Use exactly this structure:
+Use exactly:
 
 {
   "symbol": "XAUUSD",
@@ -1577,7 +2054,7 @@ Use exactly this structure:
   "tp5": "0000",
   "sl": "0000",
   "confidence": "Medium",
-  "analysis": "short technical explanation",
+  "analysis": "short technical analysis",
   "warning": "short risk warning"
 }
 
@@ -1593,35 +2070,36 @@ BUY
 SELL
 or WAIT
 
-4. If the visible chart does not provide enough evidence for a directional trade, use WAIT.
+4. If the chart does not provide enough evidence for BUY or SELL, use WAIT.
 
-5. Entry must be a realistic visible price or price zone.
+5. Entry must be based on visible price structure.
 
-6. TP1 through TP5 must be realistic price levels based on visible structure.
+6. TP1 through TP5 must be realistic levels based on visible structure.
 
-7. SL must be a realistic invalidation/stop-loss level.
+7. SL must be a realistic invalidation level.
 
-8. confidence must be exactly:
+8. confidence must be:
 Low
 Medium
 or High
 
-9. Do not invent an indicator that is not visible.
+9. Never claim certainty.
 
-10. Do not claim certainty.
+10. Never guarantee profit.
 
-11. Keep the analysis short.
+11. Do not invent information that cannot be seen.
 
-12. Keep the warning short.
+12. Keep analysis short.
 
-13. If the image is not a usable XAUUSD chart, return:
-direction = WAIT
-and explain the problem in analysis.
+13. Keep warning short.
 
-14. If the selected timeframe cannot be visually confirmed from the screenshot, still use the user's selected timeframe "${selectedTimeframe}" as the timeframe field.
+14. If the uploaded image is not a usable XAUUSD chart, use WAIT and explain the issue.
+
+15. The fields "analysis" and "warning" MUST be written in ${languageName}.
 
 Return JSON only.
 `;
+
 
       let aiResult =
         await requestAIAnalysis(
@@ -1629,53 +2107,51 @@ Return JSON only.
           prompt
         );
 
+
       if (
         !aiResult.response.ok
       ) {
+
         console.error(
-          "OPENAI FIRST ERROR:",
+          "OPENAI ERROR:",
           aiResult.data
         );
 
-        return res.status(
-          aiResult.response.status >= 400 &&
-          aiResult.response.status < 600
-            ? 502
-            : 500
-        ).json({
+        return res.status(502).json({
           error:
             aiResult.data?.error?.message ||
-            "OpenAI analysis failed.",
-          details:
-            aiResult.data?.error?.type ||
-            null
+            "OpenAI analysis failed."
         });
       }
+
 
       let responseText =
         extractResponseText(
           aiResult.data
         );
 
+
       /*
-        اگر خروجی اول خالی بود،
-        یک بار با prompt کوتاه‌تر دوباره تلاش می‌کنیم.
+        اگر پاسخ خالی بود،
+        یک تلاش مجدد انجام می‌شود.
       */
 
-      if (!responseText) {
-        console.warn(
-          "OPENAI EMPTY RESPONSE. RETRYING..."
-        );
+      if (
+        !responseText
+      ) {
 
         const retryPrompt = `
-Analyze this XAUUSD chart for the user's selected timeframe: ${selectedTimeframe}.
+Analyze the uploaded XAUUSD chart.
+
+Selected timeframe:
+${selectedTimeframe}
 
 Return ONLY valid JSON.
 
 {
   "symbol":"XAUUSD",
   "timeframe":"${selectedTimeframe}",
-  "direction":"BUY",
+  "direction":"WAIT",
   "entry":"",
   "tp1":"",
   "tp2":"",
@@ -1685,14 +2161,19 @@ Return ONLY valid JSON.
   "sl":"",
   "confidence":"Low",
   "analysis":"",
-  "warning":"Trading involves risk."
+  "warning":""
 }
 
 direction must be BUY, SELL or WAIT.
+
 confidence must be Low, Medium or High.
-Use only information visible in the image.
-If there is not enough evidence, use WAIT.
-Do not write markdown.
+
+Use only visible chart information.
+
+Do not guarantee profit.
+
+Write analysis and warning in ${languageName}.
+
 Return JSON only.
 `;
 
@@ -1705,15 +2186,11 @@ Return JSON only.
         if (
           !aiResult.response.ok
         ) {
-          console.error(
-            "OPENAI RETRY ERROR:",
-            aiResult.data
-          );
 
           return res.status(502).json({
             error:
               aiResult.data?.error?.message ||
-              "OpenAI analysis failed on retry."
+              "OpenAI retry failed."
           });
         }
 
@@ -1723,44 +2200,32 @@ Return JSON only.
           );
       }
 
-      if (!responseText) {
-        console.error(
-          "OPENAI EMPTY RESPONSE FINAL:",
-          {
-            status:
-              aiResult.data?.status,
-            incomplete:
-              aiResult.data?.incomplete_details,
-            outputCount:
-              Array.isArray(
-                aiResult.data?.output
-              )
-                ? aiResult.data.output.length
-                : 0,
-            model:
-              aiResult.data?.model ||
-              AI_MODEL
-          }
-        );
+
+      if (
+        !responseText
+      ) {
 
         return res.status(502).json({
           error:
-            "AI returned no readable text output. Please try the chart again."
+            "AI returned no readable text output. Please try again."
         });
       }
+
 
       const parsed =
         findJsonObject(
           responseText
         );
 
+
       if (
         !parsed ||
         typeof parsed !==
           "object"
       ) {
+
         console.error(
-          "AI JSON PARSE ERROR:",
+          "AI JSON ERROR:",
           responseText
         );
 
@@ -1770,11 +2235,13 @@ Return JSON only.
         });
       }
 
+
       const result =
         normalizeAnalysis(
           parsed,
           selectedTimeframe
         );
+
 
       const saved =
         await sql`
@@ -1827,8 +2294,11 @@ Return JSON only.
           RETURNING *
         `;
 
+
       return res.json({
-        ok: true,
+
+        ok:
+          true,
 
         analysis:
           result,
@@ -1837,7 +2307,9 @@ Return JSON only.
           saved[0]
       });
 
+
     } catch (error) {
+
       console.error(
         "ANALYZE ERROR:",
         error
@@ -1852,15 +2324,19 @@ Return JSON only.
   }
 );
 
+
 /* =========================================================
    ANALYSIS HISTORY
+   فقط کاربران تأییدشده
 ========================================================= */
 
 app.get(
   "/api/analyses",
-  requireUser,
+  requireApprovedUser,
   async (req, res) => {
+
     try {
+
       const rows =
         await sql`
           SELECT *
@@ -1878,6 +2354,7 @@ app.get(
       });
 
     } catch (error) {
+
       console.error(
         "ANALYSES ERROR:",
         error
@@ -1891,6 +2368,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN LOGIN
 ========================================================= */
@@ -1898,6 +2376,7 @@ app.get(
 app.post(
   "/api/admin/login",
   (req, res) => {
+
     const password =
       String(
         req.body?.password ||
@@ -1909,6 +2388,7 @@ app.post(
       password !==
         ADMIN_PASSWORD
     ) {
+
       return res.status(401).json({
         error:
           "Invalid admin password."
@@ -1942,6 +2422,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN DATA
 ========================================================= */
@@ -1950,7 +2431,9 @@ app.get(
   "/api/admin/data",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const users =
         await sql`
           SELECT
@@ -1963,6 +2446,7 @@ app.get(
           FROM users
           ORDER BY created_at DESC
         `;
+
 
       const payments =
         await sql`
@@ -1979,16 +2463,21 @@ app.get(
             u.email
           FROM payments p
           LEFT JOIN users u
-            ON u.id = p.user_id
-          ORDER BY p.created_at DESC
+            ON u.id =
+              p.user_id
+          ORDER BY
+            p.created_at DESC
         `;
+
 
       const signals =
         await sql`
           SELECT *
           FROM signals
-          ORDER BY created_at DESC
+          ORDER BY
+            created_at DESC
         `;
+
 
       return res.json({
         ok: true,
@@ -1997,7 +2486,9 @@ app.get(
         signals
       });
 
+
     } catch (error) {
+
       console.error(
         "ADMIN DATA ERROR:",
         error
@@ -2011,6 +2502,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN RECEIPT
 ========================================================= */
@@ -2019,11 +2511,23 @@ app.get(
   "/api/admin/payment/:id/receipt",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const id =
         Number(
           req.params.id
         );
+
+      if (
+        !Number.isInteger(id)
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Invalid payment ID."
+        });
+      }
 
       const rows =
         await sql`
@@ -2031,45 +2535,53 @@ app.get(
             receipt_data,
             receipt_mime
           FROM payments
-          WHERE id = ${id}
+          WHERE id =
+            ${id}
           LIMIT 1
         `;
 
+
       if (!rows.length) {
+
         return res.status(404).json({
           error:
             "Payment not found."
         });
       }
 
+
       if (
         !rows[0].receipt_data
       ) {
+
         return res.status(404).json({
           error:
             "Receipt not found."
         });
       }
 
+
       const buffer =
         Buffer.from(
-          rows[0]
-            .receipt_data,
+          rows[0].receipt_data,
           "base64"
         );
 
+
       res.setHeader(
         "Content-Type",
-        rows[0]
-          .receipt_mime ||
+        rows[0].receipt_mime ||
           "image/jpeg"
       );
+
 
       return res.send(
         buffer
       );
 
+
     } catch (error) {
+
       console.error(
         "RECEIPT ERROR:",
         error
@@ -2083,6 +2595,7 @@ app.get(
   }
 );
 
+
 /* =========================================================
    ADMIN APPROVE PAYMENT
 ========================================================= */
@@ -2091,11 +2604,68 @@ app.post(
   "/api/admin/payment/:id/approve",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const id =
         Number(
           req.params.id
         );
+
+      if (
+        !Number.isInteger(id)
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Invalid payment ID."
+        });
+      }
+
+
+      const paymentRows =
+        await sql`
+          SELECT *
+          FROM payments
+          WHERE id =
+            ${id}
+          LIMIT 1
+        `;
+
+
+      if (
+        !paymentRows.length
+      ) {
+
+        return res.status(404).json({
+          error:
+            "Payment not found."
+        });
+      }
+
+
+      const payment =
+        paymentRows[0];
+
+
+      /*
+        پرداختی که قبلاً approved شده
+        دوباره کاری نمی‌کند.
+      */
+
+      if (
+        payment.status ===
+        "approved"
+      ) {
+
+        return res.json({
+          ok: true,
+          alreadyApproved:
+            true,
+          payment
+        });
+      }
+
 
       const rows =
         await sql`
@@ -2105,23 +2675,21 @@ app.post(
               'approved',
             reviewed_at =
               NOW()
-          WHERE id = ${id}
+          WHERE id =
+            ${id}
           RETURNING *
         `;
 
-      if (!rows.length) {
-        return res.status(404).json({
-          error:
-            "Payment not found."
-        });
-      }
 
       await sql`
         UPDATE users
-        SET approved = TRUE
+        SET
+          approved =
+            TRUE
         WHERE id =
-          ${rows[0].user_id}
+          ${payment.user_id}
       `;
+
 
       return res.json({
         ok: true,
@@ -2129,7 +2697,9 @@ app.post(
           rows[0]
       });
 
+
     } catch (error) {
+
       console.error(
         "APPROVE ERROR:",
         error
@@ -2143,6 +2713,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN REJECT PAYMENT
 ========================================================= */
@@ -2151,11 +2722,24 @@ app.post(
   "/api/admin/payment/:id/reject",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const id =
         Number(
           req.params.id
         );
+
+      if (
+        !Number.isInteger(id)
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Invalid payment ID."
+        });
+      }
+
 
       const rows =
         await sql`
@@ -2165,16 +2749,28 @@ app.post(
               'rejected',
             reviewed_at =
               NOW()
-          WHERE id = ${id}
+          WHERE id =
+            ${id}
           RETURNING *
         `;
 
-      if (!rows.length) {
+
+      if (
+        !rows.length
+      ) {
+
         return res.status(404).json({
           error:
             "Payment not found."
         });
       }
+
+
+      /*
+        اگر این کاربر قبلاً approved شده،
+        reject کردن رسید جدید نباید دسترسی
+        قبلی او را خاموش کند.
+      */
 
       return res.json({
         ok: true,
@@ -2182,7 +2778,9 @@ app.post(
           rows[0]
       });
 
+
     } catch (error) {
+
       console.error(
         "REJECT ERROR:",
         error
@@ -2196,6 +2794,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN APPROVE USER
 ========================================================= */
@@ -2204,17 +2803,33 @@ app.post(
   "/api/admin/user/:id/approve",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const id =
         Number(
           req.params.id
         );
 
+      if (
+        !Number.isInteger(id)
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Invalid user ID."
+        });
+      }
+
+
       const rows =
         await sql`
           UPDATE users
-          SET approved = TRUE
-          WHERE id = ${id}
+          SET
+            approved =
+              TRUE
+          WHERE id =
+            ${id}
           RETURNING
             id,
             name,
@@ -2224,12 +2839,17 @@ app.post(
             created_at
         `;
 
-      if (!rows.length) {
+
+      if (
+        !rows.length
+      ) {
+
         return res.status(404).json({
           error:
             "User not found."
         });
       }
+
 
       return res.json({
         ok: true,
@@ -2237,7 +2857,9 @@ app.post(
           rows[0]
       });
 
+
     } catch (error) {
+
       console.error(
         "USER APPROVE ERROR:",
         error
@@ -2251,6 +2873,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN CREATE SIGNAL
 ========================================================= */
@@ -2259,7 +2882,9 @@ app.post(
   "/api/admin/signals",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const title =
         String(
           req.body?.title ||
@@ -2272,15 +2897,18 @@ app.post(
             ""
         ).trim();
 
+
       if (
         !title ||
         !body
       ) {
+
         return res.status(400).json({
           error:
             "Title and body are required."
         });
       }
+
 
       const rows =
         await sql`
@@ -2295,13 +2923,16 @@ app.post(
           RETURNING *
         `;
 
+
       return res.json({
         ok: true,
         signal:
           rows[0]
       });
 
+
     } catch (error) {
+
       console.error(
         "CREATE SIGNAL ERROR:",
         error
@@ -2315,6 +2946,7 @@ app.post(
   }
 );
 
+
 /* =========================================================
    ADMIN DELETE SIGNAL
 ========================================================= */
@@ -2323,22 +2955,39 @@ app.delete(
   "/api/admin/signals/:id",
   requireAdmin,
   async (req, res) => {
+
     try {
+
       const id =
         Number(
           req.params.id
         );
 
+      if (
+        !Number.isInteger(id)
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Invalid signal ID."
+        });
+      }
+
+
       await sql`
         DELETE FROM signals
-        WHERE id = ${id}
+        WHERE id =
+          ${id}
       `;
+
 
       return res.json({
         ok: true
       });
 
+
     } catch (error) {
+
       console.error(
         "DELETE SIGNAL ERROR:",
         error
@@ -2352,8 +3001,9 @@ app.delete(
   }
 );
 
+
 /* =========================================================
-   MULTER / GENERAL ERRORS
+   GENERAL ERROR HANDLER
 ========================================================= */
 
 app.use(
@@ -2363,21 +3013,36 @@ app.use(
     res,
     next
   ) => {
+
     console.error(
       "API ERROR:",
       error
     );
 
+
     if (
       error instanceof
       multer.MulterError
     ) {
+
+      if (
+        error.code ===
+        "LIMIT_FILE_SIZE"
+      ) {
+
+        return res.status(400).json({
+          error:
+            "File is too large. Maximum size is 5 MB."
+        });
+      }
+
       return res.status(400).json({
         error:
           error.message ||
           "Upload error."
       });
     }
+
 
     return res.status(500).json({
       error:
@@ -2386,6 +3051,7 @@ app.use(
     });
   }
 );
+
 
 /* =========================================================
    EXPORT
