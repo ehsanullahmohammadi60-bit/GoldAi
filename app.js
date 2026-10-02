@@ -4,6 +4,7 @@ let currentUser = null;
 let selectedChartFile = null;
 let selectedTimeframe = "1m";
 let selectedPaymentMethod = "hesabpay";
+
 let accessPollTimer = null;
 let paymentSubmitting = false;
 let analysisSubmitting = false;
@@ -136,13 +137,16 @@ const translations = {
     approvedPayment:
       "پرداخت شما تأیید شد. دسترسی شما فعال است.",
 
+    rejectedPayment:
+      "پرداخت شما رد شده است. لطفاً رسید صحیح را ارسال کنید.",
+
     paymentHesabPay:
       "روش پرداخت انتخاب‌شده: HesabPay — 240 AFN",
 
     paymentBinance:
       "روش پرداخت انتخاب‌شده: Binance Pay — 4 USD / USDT",
 
-    wait: "صبر",
+    wait: "در انتظار",
     low: "کم",
     medium: "متوسط",
     high: "بالا",
@@ -154,7 +158,22 @@ const translations = {
       "حساب شما فعال است و تمام قابلیت‌های سایت در دسترس شما قرار دارد.",
 
     lockedAccount:
-      "تا زمانی که پرداخت شما توسط مدیر تأیید نشود، قابلیت‌های سایت قفل هستند."
+      "تا زمانی که پرداخت شما توسط مدیر تأیید نشود، قابلیت‌های سایت قفل هستند.",
+
+    paymentSubmitted:
+      "رسید پرداخت شما ارسال شده و در انتظار بررسی مدیر است.",
+
+    choosePayment:
+      "یکی از روش‌های پرداخت را انتخاب کنید.",
+
+    sessionExpired:
+      "جلسه شما منقضی شده است. لطفاً دوباره وارد شوید.",
+
+    networkError:
+      "ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.",
+
+    accessChecking:
+      "در حال بررسی وضعیت دسترسی..."
   },
 
 
@@ -292,6 +311,9 @@ const translations = {
     approvedPayment:
       "Your payment has been approved. Your access is active.",
 
+    rejectedPayment:
+      "Your payment was rejected. Please submit a valid receipt.",
+
     paymentHesabPay:
       "Selected payment method: HesabPay — 240 AFN",
 
@@ -310,7 +332,22 @@ const translations = {
       "Your account is active and all website features are available.",
 
     lockedAccount:
-      "Website features remain locked until your payment is approved."
+      "Website features remain locked until your payment is approved.",
+
+    paymentSubmitted:
+      "Your payment receipt has been submitted and is waiting for administrator review.",
+
+    choosePayment:
+      "Please select a payment method.",
+
+    sessionExpired:
+      "Your session has expired. Please log in again.",
+
+    networkError:
+      "Could not connect to the server. Please try again.",
+
+    accessChecking:
+      "Checking access status..."
   },
 
 
@@ -524,6 +561,9 @@ const translations = {
     approvedPayment:
       "تمت الموافقة على الدفع. حسابك مفعل.",
 
+    rejectedPayment:
+      "تم رفض الدفع. يرجى إرسال إيصال صحيح.",
+
     paymentHesabPay:
       "طريقة الدفع المختارة: HesabPay — 240 AFN",
 
@@ -552,7 +592,22 @@ const translations = {
       "حسابك مفعل وجميع ميزات الموقع متاحة لك.",
 
     lockedAccount:
-      "تبقى ميزات الموقع مقفلة حتى تتم الموافقة على الدفع."
+      "تبقى ميزات الموقع مقفلة حتى تتم الموافقة على الدفع.",
+
+    paymentSubmitted:
+      "تم إرسال إيصال الدفع وينتظر مراجعة المسؤول.",
+
+    choosePayment:
+      "يرجى اختيار طريقة الدفع.",
+
+    sessionExpired:
+      "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.",
+
+    networkError:
+      "تعذر الاتصال بالخادم. يرجى المحاولة مرة أخرى.",
+
+    accessChecking:
+      "جاري التحقق من حالة الوصول..."
   }
 
 };
@@ -578,8 +633,7 @@ function setLanguage(language) {
     language
   );
 
-  document.documentElement.lang =
-    language;
+  document.documentElement.lang = language;
 
   document.documentElement.dir =
     language === "en"
@@ -684,8 +738,7 @@ function showMessage(
   type = ""
 ) {
 
-  const element =
-    $(id);
+  const element = $(id);
 
   if (!element) {
     return;
@@ -696,8 +749,8 @@ function showMessage(
 
   element.className =
     type
-      ? `message ${type}`
-      : "message";
+      ? `msg ${type}`
+      : "msg";
 }
 
 
@@ -706,8 +759,7 @@ function setDisplay(
   visible
 ) {
 
-  const element =
-    $(id);
+  const element = $(id);
 
   if (!element) {
     return;
@@ -738,27 +790,35 @@ function escapeHtml(value) {
 }
 
 
-function textValue(
-  value,
-  fallback = "WAIT"
-) {
+function safeNumber(value) {
 
   if (
     value === undefined ||
     value === null ||
-    String(value).trim() === ""
+    value === ""
   ) {
-    return fallback;
+    return "";
   }
 
-  return String(value);
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return String(value);
+  }
+
+  return String(
+    Number(
+      number.toFixed(5)
+    )
+  );
 }
 
 
 function getField(
   object,
   names,
-  fallback = "WAIT"
+  fallback = ""
 ) {
 
   if (
@@ -785,6 +845,56 @@ function getField(
 }
 
 
+function formatDate(value) {
+
+  if (!value) {
+    return "";
+  }
+
+  try {
+
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return String(value);
+    }
+
+    return new Intl.DateTimeFormat(
+      getLanguage() === "fa"
+        ? "fa-IR"
+        : getLanguage() === "ar"
+          ? "ar"
+          : "en-US",
+      {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }
+    ).format(date);
+
+  } catch {
+
+    return String(value);
+  }
+}
+
+
+function getTimeframeLabel(value) {
+
+  const map = {
+    "1m": "1M",
+    "5m": "5M",
+    "15m": "15M"
+  };
+
+  return map[value] || value || "1M";
+}
+
+
 /* =========================================================
    API
 ========================================================= */
@@ -800,28 +910,56 @@ async function api(
     ...options
   };
 
-  const response =
-    await fetch(
-      url,
-      finalOptions
+  let response;
+
+  try {
+
+    response =
+      await fetch(
+        url,
+        finalOptions
+      );
+
+  } catch (error) {
+
+    throw new Error(
+      t("networkError")
     );
+  }
 
   let data = {};
 
   try {
+
     data =
       await response.json();
-  } catch (_) {
+
+  } catch {
+
     data = {};
   }
 
   if (!response.ok) {
 
-    throw new Error(
+    const message =
       data.error ||
       data.message ||
-      `Request failed (${response.status})`
-    );
+      (
+        response.status === 401
+          ? t("sessionExpired")
+          : `Request failed (${response.status})`
+      );
+
+    const error =
+      new Error(message);
+
+    error.status =
+      response.status;
+
+    error.data =
+      data;
+
+    throw error;
   }
 
   return data;
@@ -854,7 +992,6 @@ function setupAuthTabs() {
                 item === tab
               );
             });
-
 
           const loginForm =
             $("loginForm");
@@ -924,6 +1061,17 @@ async function registerUser(event) {
     showMessage(
       "authMsg",
       t("fillRegister"),
+      "error"
+    );
+
+    return;
+  }
+
+  if (password.length < 6) {
+
+    showMessage(
+      "authMsg",
+      t("password6"),
       "error"
     );
 
@@ -1122,11 +1270,29 @@ async function logoutUser() {
     );
   }
 
-  currentUser =
-    null;
+  currentUser = null;
+  selectedChartFile = null;
 
-  selectedChartFile =
-    null;
+  const chartFile =
+    $("chartFile");
+
+  if (chartFile) {
+    chartFile.value = "";
+  }
+
+  const chartPreview =
+    $("chartPreview");
+
+  if (chartPreview) {
+    chartPreview.removeAttribute(
+      "src"
+    );
+  }
+
+  setDisplay(
+    "chartPreviewWrap",
+    false
+  );
 
   setDisplay(
     "auth",
@@ -1155,7 +1321,7 @@ async function logoutUser() {
 
 
 /* =========================================================
-   PAYMENT DETAILS
+   PAYMENT
 ========================================================= */
 
 function updatePaymentDetails() {
@@ -1183,10 +1349,6 @@ function updatePaymentDetails() {
 }
 
 
-/* =========================================================
-   PAYMENT METHOD BUTTONS
-========================================================= */
-
 function setupPaymentMethods() {
 
   document
@@ -1207,12 +1369,6 @@ function setupPaymentMethods() {
         "click",
         () => {
 
-          if (
-            currentUser?.approved
-          ) {
-            return;
-          }
-
           selectedPaymentMethod =
             button.dataset.method ||
             "hesabpay";
@@ -1231,16 +1387,18 @@ function setupPaymentMethods() {
                 return;
               }
 
-              item.classList.remove(
-                "active"
+              item.classList.toggle(
+                "active",
+                item === button
               );
             });
 
-          button.classList.add(
-            "active"
-          );
-
           updatePaymentDetails();
+
+          showMessage(
+            "payMsg",
+            ""
+          );
         }
       );
     });
@@ -1250,7 +1408,7 @@ function setupPaymentMethods() {
 
 
 /* =========================================================
-   PAYMENT SUBMISSION
+   PAYMENT SUBMIT
 ========================================================= */
 
 async function submitPayment(event) {
@@ -1259,7 +1417,8 @@ async function submitPayment(event) {
 
   if (
     paymentSubmitting ||
-    currentUser?.approved
+    !currentUser ||
+    currentUser.approved
   ) {
     return;
   }
@@ -1268,8 +1427,9 @@ async function submitPayment(event) {
     $("reference")?.value.trim() ||
     "";
 
-  const file =
-    $("receipt")?.files?.[0];
+  const receipt =
+    $("receipt")?.files?.[0] ||
+    null;
 
   if (!reference) {
 
@@ -1282,7 +1442,7 @@ async function submitPayment(event) {
     return;
   }
 
-  if (!file) {
+  if (!receipt) {
 
     showMessage(
       "payMsg",
@@ -1294,29 +1454,8 @@ async function submitPayment(event) {
   }
 
   if (
-    file.size >
-    5 * 1024 * 1024
-  ) {
-
-    showMessage(
-      "payMsg",
-      t("invalidImageSize"),
-      "error"
-    );
-
-    return;
-  }
-
-  const allowedTypes = [
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-    "image/gif"
-  ];
-
-  if (
-    !allowedTypes.includes(
-      file.type
+    !receipt.type.startsWith(
+      "image/"
     )
   ) {
 
@@ -1329,8 +1468,19 @@ async function submitPayment(event) {
     return;
   }
 
-  paymentSubmitting =
-    true;
+  if (
+    receipt.size >
+    5 * 1024 * 1024
+  ) {
+
+    showMessage(
+      "payMsg",
+      t("invalidImageSize"),
+      "error"
+    );
+
+    return;
+  }
 
   const button =
     event.submitter ||
@@ -1338,7 +1488,35 @@ async function submitPayment(event) {
       "button[type='submit']"
     );
 
+  const formData =
+    new FormData();
+
+  formData.append(
+    "method",
+    selectedPaymentMethod
+  );
+
+  formData.append(
+    "amount",
+    selectedPaymentMethod ===
+      "binance"
+      ? "4"
+      : "240"
+  );
+
+  formData.append(
+    "reference",
+    reference
+  );
+
+  formData.append(
+    "receipt",
+    receipt
+  );
+
   try {
+
+    paymentSubmitting = true;
 
     if (button) {
       button.disabled = true;
@@ -1347,32 +1525,6 @@ async function submitPayment(event) {
     showMessage(
       "payMsg",
       t("paymentLoading")
-    );
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      "reference",
-      reference
-    );
-
-    formData.append(
-      "method",
-      selectedPaymentMethod
-    );
-
-    formData.append(
-      "amount",
-      selectedPaymentMethod ===
-        "binance"
-        ? "4"
-        : "240"
-    );
-
-    formData.append(
-      "receipt",
-      file
     );
 
     const data =
@@ -1391,6 +1543,10 @@ async function submitPayment(event) {
       "success"
     );
 
+    if ($("paymentForm")) {
+      $("paymentForm").reset();
+    }
+
     await refreshAccess();
 
   } catch (error) {
@@ -1408,8 +1564,7 @@ async function submitPayment(event) {
 
   } finally {
 
-    paymentSubmitting =
-      false;
+    paymentSubmitting = false;
 
     if (button) {
       button.disabled = false;
@@ -1419,241 +1574,205 @@ async function submitPayment(event) {
 
 
 /* =========================================================
-   PAYMENT UI
+   ACCESS UI
 ========================================================= */
 
-function renderPaymentStatus(
-  paymentStatus
+function renderLockedState(
+  accessData = {}
 ) {
 
-  const status =
+  setDisplay(
+    "payPanel",
+    true
+  );
+
+  setDisplay(
+    "approvedNotice",
+    false
+  );
+
+  setDisplay(
+    "aiPanel",
+    false
+  );
+
+  setDisplay(
+    "historyPanel",
+    false
+  );
+
+  setDisplay(
+    "signalsPanel",
+    false
+  );
+
+  setDisplay(
+    "supportPanel",
+    false
+  );
+
+  const paymentStatus =
     $("paymentStatus");
 
-  const notice =
+  const lockNotice =
     $("paymentLockNotice");
+
+  const status =
+    accessData.paymentStatus ||
+    null;
+
+  if (paymentStatus) {
+
+    paymentStatus.className =
+      "accessStatus pending";
+
+    if (status === "rejected") {
+
+      paymentStatus.textContent =
+        t("rejectedPayment");
+
+      paymentStatus.classList.add(
+        "error"
+      );
+
+    } else if (
+      status === "pending"
+    ) {
+
+      paymentStatus.textContent =
+        t("pendingPayment");
+
+    } else {
+
+      paymentStatus.textContent =
+        t("notApproved");
+    }
+  }
+
+  if (lockNotice) {
+
+    lockNotice.textContent =
+      status === "pending"
+        ? t("paymentSubmitted")
+        : t("lockedAccount");
+  }
+}
+
+
+function renderApprovedState() {
+
+  setDisplay(
+    "payPanel",
+    false
+  );
+
+  setDisplay(
+    "approvedNotice",
+    true
+  );
+
+  setDisplay(
+    "aiPanel",
+    true
+  );
+
+  setDisplay(
+    "historyPanel",
+    true
+  );
+
+  setDisplay(
+    "signalsPanel",
+    true
+  );
+
+  setDisplay(
+    "supportPanel",
+    true
+  );
+
+  const paymentStatus =
+    $("paymentStatus");
+
+  if (paymentStatus) {
+    paymentStatus.textContent =
+      t("approvedPayment");
+
+    paymentStatus.className =
+      "accessStatus approved";
+  }
+
+  const approvedText =
+    $("approvedNoticeText");
+
+  if (approvedText) {
+    approvedText.textContent =
+      t("activeAccount");
+  }
+}
+
+
+function updateUserHeader() {
+
+  const status =
+    $("status");
 
   if (!status) {
     return;
   }
 
-  status.classList.remove(
-    "pending",
-    "approved",
-    "error"
-  );
-
-  if (
-    currentUser?.approved
-  ) {
-
-    status.classList.add(
-      "approved"
-    );
-
-    status.textContent =
-      t("approvedPayment");
-
-    if (notice) {
-      notice.textContent =
-        "";
-    }
-
+  if (!currentUser) {
+    status.textContent = "";
     return;
   }
 
-  if (
-    paymentStatus ===
-    "pending"
-  ) {
-
-    status.classList.add(
-      "pending"
-    );
-
-    status.textContent =
-      t("pendingPayment");
-
-    if (notice) {
-      notice.textContent =
-        t("lockedAccount");
-    }
-
-    return;
-  }
-
-  if (
-    paymentStatus ===
-    "rejected"
-  ) {
-
-    status.classList.add(
-      "error"
-    );
-
-    status.textContent =
-      getLanguage() === "fa"
-        ? "رسید قبلی رد شده است. لطفاً پرداخت و رسید صحیح را ارسال کنید."
-        : getLanguage() === "ar"
-          ? "تم رفض الإيصال السابق. يرجى إرسال إيصال صحيح."
-          : "The previous receipt was rejected. Please submit a valid payment receipt.";
-
-    if (notice) {
-      notice.textContent =
-        t("lockedAccount");
-    }
-
-    return;
-  }
-
-  status.classList.add(
-    "pending"
-  );
+  const name =
+    currentUser.name ||
+    currentUser.email ||
+    "";
 
   status.textContent =
-    t("notApproved");
-
-  if (notice) {
-    notice.textContent =
-      t("lockedAccount");
-  }
+    name;
 }
 
 
 /* =========================================================
-   ACCESS UI
+   ACCESS / SESSION
 ========================================================= */
 
-function renderAccessUI(
-  approved,
-  paymentStatus
-) {
+async function getCurrentUser() {
 
-  const isApproved =
-    approved === true;
+  try {
 
-  currentUser = currentUser || {};
-
-  currentUser.approved =
-    isApproved;
-
-  /* Payment */
-
-  setDisplay(
-    "payPanel",
-    !isApproved
-  );
-
-  /* Approved notice */
-
-  setDisplay(
-    "approvedNotice",
-    isApproved
-  );
-
-  if (isApproved) {
-
-    const approvedText =
-      $("approvedNoticeText");
-
-    if (approvedText) {
-      approvedText.textContent =
-        t("activeAccount");
-    }
-  }
-
-  /* Protected features */
-
-  setDisplay(
-    "aiPanel",
-    isApproved
-  );
-
-  setDisplay(
-    "historyPanel",
-    isApproved
-  );
-
-  setDisplay(
-    "signalsPanel",
-    isApproved
-  );
-
-  setDisplay(
-    "supportPanel",
-    isApproved
-  );
-
-  if (!isApproved) {
-
-    const result =
-      $("analysisResult");
-
-    if (result) {
-      result.classList.add(
-        "hidden"
+    const data =
+      await api(
+        "/api/me"
       );
+
+    currentUser =
+      data.user ||
+      null;
+
+    return currentUser;
+
+  } catch (error) {
+
+    if (
+      error.status === 401
+    ) {
+      currentUser = null;
+      return null;
     }
-  }
 
-  renderPaymentStatus(
-    paymentStatus
-  );
-
-  updateUserStatus();
-
-  if (isApproved) {
-
-    stopAccessPolling();
-
-    loadHistory();
-    loadSignals();
-
-  } else {
-
-    startAccessPolling();
+    throw error;
   }
 }
 
-
-/* =========================================================
-   USER STATUS
-========================================================= */
-
-function updateUserStatus() {
-
-  const status =
-    $("status");
-
-  if (
-    !status ||
-    !currentUser
-  ) {
-    return;
-  }
-
-  if (
-    currentUser.approved
-  ) {
-
-    status.textContent =
-      t("activeAccount");
-
-  } else {
-
-    status.textContent =
-      t("notApproved");
-  }
-}
-
-
-/* =========================================================
-   ACCESS DATA
-========================================================= */
 
 async function refreshAccess() {
 
   if (!currentUser) {
-    return;
+    return null;
   }
 
   try {
@@ -1663,11 +1782,44 @@ async function refreshAccess() {
         "/api/access"
       );
 
-    renderAccessUI(
-      Boolean(data.approved),
-      data.paymentStatus ||
-        null
-    );
+    if (
+      data.user
+    ) {
+      currentUser =
+        data.user;
+    }
+
+    if (
+      data.approved !== undefined
+    ) {
+      currentUser.approved =
+        Boolean(
+          data.approved
+        );
+    }
+
+    updateUserHeader();
+
+    if (
+      currentUser.approved ||
+      data.approved === true
+    ) {
+
+      renderApprovedState();
+
+      await Promise.all([
+        loadHistory(),
+        loadSignals()
+      ]);
+
+    } else {
+
+      renderLockedState(
+        data
+      );
+    }
+
+    return data;
 
   } catch (error) {
 
@@ -1676,24 +1828,58 @@ async function refreshAccess() {
       error
     );
 
-    renderAccessUI(
-      Boolean(currentUser.approved),
-      null
-    );
+    if (
+      error.status === 401
+    ) {
+
+      currentUser = null;
+
+      stopAccessPolling();
+
+      setDisplay(
+        "auth",
+        true
+      );
+
+      setDisplay(
+        "dashboard",
+        false
+      );
+
+      return null;
+    }
+
+    const paymentStatus =
+      $("paymentStatus");
+
+    if (paymentStatus) {
+
+      paymentStatus.textContent =
+        error.message ||
+        t("networkError");
+
+      paymentStatus.className =
+        "accessStatus error";
+    }
+
+    return null;
   }
 }
 
-
-/* =========================================================
-   POLLING
-========================================================= */
 
 function startAccessPolling() {
 
   stopAccessPolling();
 
+  if (
+    !currentUser ||
+    currentUser.approved
+  ) {
+    return;
+  }
+
   accessPollTimer =
-    setInterval(
+    window.setInterval(
       async () => {
 
         if (
@@ -1705,6 +1891,12 @@ function startAccessPolling() {
         }
 
         await refreshAccess();
+
+        if (
+          currentUser?.approved
+        ) {
+          stopAccessPolling();
+        }
 
       },
       15000
@@ -1718,7 +1910,7 @@ function stopAccessPolling() {
     accessPollTimer
   ) {
 
-    clearInterval(
+    window.clearInterval(
       accessPollTimer
     );
 
@@ -1729,20 +1921,1222 @@ function stopAccessPolling() {
 
 
 /* =========================================================
-   SUPPORT
+   TIMEFRAME
 ========================================================= */
 
-async function sendSupport() {
+function updateTimeframeButtons() {
+
+  document
+    .querySelectorAll(
+      ".timeframeOption"
+    )
+    .forEach((button) => {
+
+      button.classList.toggle(
+        "active",
+        button.dataset.timeframe ===
+          selectedTimeframe
+      );
+    });
+
+  const hidden =
+    $("selectedTimeframe");
+
+  if (hidden) {
+    hidden.value =
+      selectedTimeframe;
+  }
+}
+
+
+function setupTimeframes() {
+
+  document
+    .querySelectorAll(
+      ".timeframeOption"
+    )
+    .forEach((button) => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          selectedTimeframe =
+            button.dataset.timeframe ||
+            "1m";
+
+          updateTimeframeButtons();
+        }
+      );
+    });
+
+  updateTimeframeButtons();
+}
+
+
+/* =========================================================
+   CHART FILE
+========================================================= */
+
+function validateImageFile(
+  file
+) {
+
+  if (!file) {
+    return false;
+  }
+
+  const allowed = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif"
+  ];
 
   if (
-    supportSubmitting ||
-    !currentUser?.approved
+    !allowed.includes(
+      file.type
+    )
+  ) {
+
+    showMessage(
+      "chartMsg",
+      t("invalidImageType"),
+      "error"
+    );
+
+    return false;
+  }
+
+  if (
+    file.size >
+    5 * 1024 * 1024
+  ) {
+
+    showMessage(
+      "chartMsg",
+      t("invalidImageSize"),
+      "error"
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+
+function setupChartUpload() {
+
+  const input =
+    $("chartFile");
+
+  if (!input) {
+    return;
+  }
+
+  input.addEventListener(
+    "change",
+    () => {
+
+      const file =
+        input.files?.[0] ||
+        null;
+
+      if (!file) {
+
+        selectedChartFile =
+          null;
+
+        setDisplay(
+          "chartPreviewWrap",
+          false
+        );
+
+        return;
+      }
+
+      if (
+        !validateImageFile(
+          file
+        )
+      ) {
+
+        input.value = "";
+
+        selectedChartFile =
+          null;
+
+        setDisplay(
+          "chartPreviewWrap",
+          false
+        );
+
+        return;
+      }
+
+      selectedChartFile =
+        file;
+
+      const preview =
+        $("chartPreview");
+
+      const wrap =
+        $("chartPreviewWrap");
+
+      if (
+        preview &&
+        wrap
+      ) {
+
+        const url =
+          URL.createObjectURL(
+            file
+          );
+
+        preview.src =
+          url;
+
+        preview.onload =
+          () => {
+            URL.revokeObjectURL(
+              url
+            );
+          };
+
+        wrap.classList.remove(
+          "hidden"
+        );
+      }
+
+      showMessage(
+        "chartMsg",
+        ""
+      );
+    }
+  );
+}
+
+
+/* =========================================================
+   AI ANALYSIS RESULT
+========================================================= */
+
+function normalizeDirection(
+  value
+) {
+
+  const raw =
+    String(
+      value || ""
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    raw.includes("BUY") ||
+    raw.includes("LONG")
+  ) {
+    return "BUY";
+  }
+
+  if (
+    raw.includes("SELL") ||
+    raw.includes("SHORT")
+  ) {
+    return "SELL";
+  }
+
+  return "WAIT";
+}
+
+
+function normalizeConfidence(
+  value
+) {
+
+  const raw =
+    String(
+      value || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    raw.includes("high") ||
+    raw.includes("بالا") ||
+    raw.includes("مرتفع")
+  ) {
+    return t("high");
+  }
+
+  if (
+    raw.includes("medium") ||
+    raw.includes("متوسط")
+  ) {
+    return t("medium");
+  }
+
+  if (
+    raw.includes("low") ||
+    raw.includes("کم") ||
+    raw.includes("منخفض")
+  ) {
+    return t("low");
+  }
+
+  return value ||
+    t("wait");
+}
+
+
+function renderAnalysis(
+  analysis,
+  fallbackTimeframe
+) {
+
+  if (
+    !analysis ||
+    typeof analysis !== "object"
   ) {
     return;
   }
 
+  const direction =
+    normalizeDirection(
+      getField(
+        analysis,
+        [
+          "direction",
+          "signal",
+          "action",
+          "trade_direction"
+        ],
+        "WAIT"
+      )
+    );
+
+  const symbol =
+    getField(
+      analysis,
+      [
+        "symbol",
+        "pair",
+        "asset"
+      ],
+      "XAUUSD"
+    );
+
+  const timeframe =
+    getField(
+      analysis,
+      [
+        "timeframe",
+        "tf"
+      ],
+      fallbackTimeframe
+    );
+
+  const entry =
+    getField(
+      analysis,
+      [
+        "entry",
+        "entry_price",
+        "entryPrice"
+      ],
+      "WAIT"
+    );
+
+  const sl =
+    getField(
+      analysis,
+      [
+        "stop_loss",
+        "stopLoss",
+        "sl"
+      ],
+      "WAIT"
+    );
+
+  const tp1 =
+    getField(
+      analysis,
+      [
+        "tp1",
+        "TP1",
+        "take_profit_1"
+      ],
+      "WAIT"
+    );
+
+  const tp2 =
+    getField(
+      analysis,
+      [
+        "tp2",
+        "TP2",
+        "take_profit_2"
+      ],
+      "WAIT"
+    );
+
+  const tp3 =
+    getField(
+      analysis,
+      [
+        "tp3",
+        "TP3",
+        "take_profit_3"
+      ],
+      "WAIT"
+    );
+
+  const tp4 =
+    getField(
+      analysis,
+      [
+        "tp4",
+        "TP4",
+        "take_profit_4"
+      ],
+      "WAIT"
+    );
+
+  const tp5 =
+    getField(
+      analysis,
+      [
+        "tp5",
+        "TP5",
+        "take_profit_5"
+      ],
+      "WAIT"
+    );
+
+  const confidence =
+    getField(
+      analysis,
+      [
+        "confidence",
+        "confidence_level"
+      ],
+      "WAIT"
+    );
+
+  const technical =
+    getField(
+      analysis,
+      [
+        "technical_analysis",
+        "technicalAnalysis",
+        "analysis",
+        "reasoning"
+      ],
+      ""
+    );
+
+  const warning =
+    getField(
+      analysis,
+      [
+        "risk_warning",
+        "riskWarning",
+        "risk",
+        "warning"
+      ],
+      t("footerWarning")
+    );
+
+  const result =
+    $("analysisResult");
+
+  if (result) {
+    result.classList.remove(
+      "hidden"
+    );
+  }
+
+  const directionElement =
+    $("analysisDirection");
+
+  if (directionElement) {
+
+    directionElement.textContent =
+      direction;
+  }
+
+  const symbolElement =
+    $("analysisSymbol");
+
+  if (symbolElement) {
+    symbolElement.textContent =
+      textValue(
+        symbol,
+        "XAUUSD"
+      );
+  }
+
+  const timeframeElement =
+    $("analysisTimeframe");
+
+  if (timeframeElement) {
+    timeframeElement.textContent =
+      getTimeframeLabel(
+        timeframe
+      );
+  }
+
+  const entryElement =
+    $("analysisEntry");
+
+  if (entryElement) {
+    entryElement.textContent =
+      safeNumber(entry);
+  }
+
+  const slElement =
+    $("analysisSL");
+
+  if (slElement) {
+    slElement.textContent =
+      safeNumber(sl);
+  }
+
+  const tp1Element =
+    $("analysisTP1");
+
+  if (tp1Element) {
+    tp1Element.textContent =
+      safeNumber(tp1);
+  }
+
+  const tp2Element =
+    $("analysisTP2");
+
+  if (tp2Element) {
+    tp2Element.textContent =
+      safeNumber(tp2);
+  }
+
+  const tp3Element =
+    $("analysisTP3");
+
+  if (tp3Element) {
+    tp3Element.textContent =
+      safeNumber(tp3);
+  }
+
+  const tp4Element =
+    $("analysisTP4");
+
+  if (tp4Element) {
+    tp4Element.textContent =
+      safeNumber(tp4);
+  }
+
+  const tp5Element =
+    $("analysisTP5");
+
+  if (tp5Element) {
+    tp5Element.textContent =
+      safeNumber(tp5);
+  }
+
+  const confidenceElement =
+    $("analysisConfidence");
+
+  if (confidenceElement) {
+    confidenceElement.textContent =
+      normalizeConfidence(
+        confidence
+      );
+  }
+
+  const textElement =
+    $("analysisTextContent");
+
+  if (textElement) {
+    textElement.textContent =
+      textValue(
+        technical,
+        t("wait")
+      );
+  }
+
+  const warningElement =
+    $("analysisWarning");
+
+  if (warningElement) {
+    warningElement.textContent =
+      textValue(
+        warning,
+        t("footerWarning")
+      );
+  }
+}
+
+
+/* =========================================================
+   AI ANALYSIS
+========================================================= */
+
+async function analyzeChart(
+  event
+) {
+
+  event.preventDefault();
+
+  if (
+    analysisSubmitting ||
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+  const file =
+    selectedChartFile ||
+    $("chartFile")?.files?.[0] ||
+    null;
+
+  if (!file) {
+
+    showMessage(
+      "chartMsg",
+      t("chartRequired"),
+      "error"
+    );
+
+    return;
+  }
+
+  if (
+    !validateImageFile(
+      file
+    )
+  ) {
+    return;
+  }
+
+  const button =
+    $("analyzeBtn");
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "chart",
+    file
+  );
+
+  formData.append(
+    "timeframe",
+    selectedTimeframe
+  );
+
+  formData.append(
+    "language",
+    getLanguage()
+  );
+
+  try {
+
+    analysisSubmitting = true;
+
+    if (button) {
+      button.disabled = true;
+    }
+
+    setDisplay(
+      "analysisResult",
+      false
+    );
+
+    showMessage(
+      "chartMsg",
+      t("analysisLoading")
+    );
+
+    const data =
+      await api(
+        "/api/analyze-chart",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+    const analysis =
+      data.analysis ||
+      data.result ||
+      data.data ||
+      data;
+
+    renderAnalysis(
+      analysis,
+      selectedTimeframe
+    );
+
+    showMessage(
+      "chartMsg",
+      data.message ||
+        t("analysisSuccess"),
+      "success"
+    );
+
+    await loadHistory();
+
+  } catch (error) {
+
+    console.error(
+      "ANALYSIS ERROR:",
+      error
+    );
+
+    showMessage(
+      "chartMsg",
+      error.message,
+      "error"
+    );
+
+  } finally {
+
+    analysisSubmitting = false;
+
+    if (button) {
+      button.disabled = false;
+    }
+  }
+}
+
+
+/* =========================================================
+   HISTORY
+========================================================= */
+
+function renderHistory(
+  items
+) {
+
+  const container =
+    $("analysisHistory");
+
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = "";
+
+  if (
+    !Array.isArray(items) ||
+    items.length === 0
+  ) {
+
+    container.textContent =
+      t("noHistory");
+
+    return;
+  }
+
+  items.forEach(
+    (item) => {
+
+      const wrapper =
+        document.createElement(
+          "div"
+        );
+
+      wrapper.className =
+        "historyItem";
+
+      const direction =
+        normalizeDirection(
+          getField(
+            item,
+            [
+              "direction",
+              "signal",
+              "action"
+            ],
+            "WAIT"
+          )
+        );
+
+      const timeframe =
+        getField(
+          item,
+          [
+            "timeframe",
+            "tf"
+          ],
+          "1m"
+        );
+
+      const entry =
+        getField(
+          item,
+          [
+            "entry",
+            "entry_price"
+          ],
+          "WAIT"
+        );
+
+      const sl =
+        getField(
+          item,
+          [
+            "stop_loss",
+            "stopLoss",
+            "sl"
+          ],
+          "WAIT"
+        );
+
+      const created =
+        getField(
+          item,
+          [
+            "created_at",
+            "createdAt",
+            "date"
+          ],
+          ""
+        );
+
+      const technical =
+        getField(
+          item,
+          [
+            "technical_analysis",
+            "technicalAnalysis",
+            "analysis"
+          ],
+          ""
+        );
+
+      wrapper.innerHTML = `
+        <div class="row">
+          <strong>
+            ${escapeHtml(direction)}
+          </strong>
+
+          <small>
+            ${escapeHtml(
+              getTimeframeLabel(
+                timeframe
+              )
+            )}
+          </small>
+        </div>
+
+        <div class="analysisGrid">
+          <div class="analysisBox">
+            <small>${escapeHtml(t("entry"))}</small>
+            <b>${escapeHtml(
+              safeNumber(entry)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>${escapeHtml(t("stopLoss"))}</small>
+            <b>${escapeHtml(
+              safeNumber(sl)
+            )}</b>
+          </div>
+        </div>
+
+        ${
+          technical
+            ? `
+              <p>
+                ${escapeHtml(
+                  technical
+                )}
+              </p>
+            `
+            : ""
+        }
+
+        ${
+          created
+            ? `
+              <small>
+                ${escapeHtml(
+                  formatDate(
+                    created
+                  )
+                )}
+              </small>
+            `
+            : ""
+        }
+      `;
+
+      container.appendChild(
+        wrapper
+      );
+    }
+  );
+}
+
+
+async function loadHistory() {
+
+  if (
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+  try {
+
+    const data =
+      await api(
+        "/api/analyses"
+      );
+
+    const items =
+      data.analyses ||
+      data.items ||
+      data.data ||
+      [];
+
+    renderHistory(
+      items
+    );
+
+  } catch (error) {
+
+    console.error(
+      "HISTORY ERROR:",
+      error
+    );
+
+    const container =
+      $("analysisHistory");
+
+    if (container) {
+      container.textContent =
+        t("historyUnavailable");
+    }
+  }
+}
+
+
+/* =========================================================
+   SIGNALS
+========================================================= */
+
+function renderSignals(
+  items
+) {
+
+  const container =
+    $("signals");
+
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = "";
+
+  if (
+    !Array.isArray(items) ||
+    items.length === 0
+  ) {
+
+    container.textContent =
+      t("noSignals");
+
+    return;
+  }
+
+  items.forEach(
+    (signal) => {
+
+      const wrapper =
+        document.createElement(
+          "div"
+        );
+
+      wrapper.className =
+        "signalItem";
+
+      const direction =
+        normalizeDirection(
+          getField(
+            signal,
+            [
+              "direction",
+              "signal",
+              "action"
+            ],
+            "WAIT"
+          )
+        );
+
+      const symbol =
+        getField(
+          signal,
+          [
+            "symbol",
+            "pair",
+            "asset"
+          ],
+          "XAUUSD"
+        );
+
+      const timeframe =
+        getField(
+          signal,
+          [
+            "timeframe",
+            "tf"
+          ],
+          "1m"
+        );
+
+      const entry =
+        getField(
+          signal,
+          [
+            "entry",
+            "entry_price"
+          ],
+          "WAIT"
+        );
+
+      const sl =
+        getField(
+          signal,
+          [
+            "stop_loss",
+            "stopLoss",
+            "sl"
+          ],
+          "WAIT"
+        );
+
+      const tp1 =
+        getField(
+          signal,
+          [
+            "tp1",
+            "TP1"
+          ],
+          "WAIT"
+        );
+
+      const tp2 =
+        getField(
+          signal,
+          [
+            "tp2",
+            "TP2"
+          ],
+          "WAIT"
+        );
+
+      const tp3 =
+        getField(
+          signal,
+          [
+            "tp3",
+            "TP3"
+          ],
+          "WAIT"
+        );
+
+      const tp4 =
+        getField(
+          signal,
+          [
+            "tp4",
+            "TP4"
+          ],
+          "WAIT"
+        );
+
+      const tp5 =
+        getField(
+          signal,
+          [
+            "tp5",
+            "TP5"
+          ],
+          "WAIT"
+        );
+
+      const created =
+        getField(
+          signal,
+          [
+            "created_at",
+            "createdAt",
+            "date"
+          ],
+          ""
+        );
+
+      wrapper.innerHTML = `
+        <div class="row">
+          <strong>
+            ${escapeHtml(direction)}
+          </strong>
+
+          <small>
+            ${escapeHtml(symbol)}
+            •
+            ${escapeHtml(
+              getTimeframeLabel(
+                timeframe
+              )
+            )}
+          </small>
+        </div>
+
+        <div class="analysisGrid">
+
+          <div class="analysisBox">
+            <small>${escapeHtml(t("entry"))}</small>
+            <b>${escapeHtml(
+              safeNumber(entry)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>${escapeHtml(t("stopLoss"))}</small>
+            <b>${escapeHtml(
+              safeNumber(sl)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP1</small>
+            <b>${escapeHtml(
+              safeNumber(tp1)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP2</small>
+            <b>${escapeHtml(
+              safeNumber(tp2)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP3</small>
+            <b>${escapeHtml(
+              safeNumber(tp3)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP4</small>
+            <b>${escapeHtml(
+              safeNumber(tp4)
+            )}</b>
+          </div>
+
+          <div class="analysisBox">
+            <small>TP5</small>
+            <b>${escapeHtml(
+              safeNumber(tp5)
+            )}</b>
+          </div>
+
+        </div>
+
+        ${
+          created
+            ? `
+              <small>
+                ${escapeHtml(
+                  formatDate(
+                    created
+                  )
+                )}
+              </small>
+            `
+            : ""
+        }
+      `;
+
+      container.appendChild(
+        wrapper
+      );
+    }
+  );
+}
+
+
+async function loadSignals() {
+
+  if (
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+  try {
+
+    const data =
+      await api(
+        "/api/signals"
+      );
+
+    const items =
+      data.signals ||
+      data.items ||
+      data.data ||
+      [];
+
+    renderSignals(
+      items
+    );
+
+  } catch (error) {
+
+    console.error(
+      "SIGNALS ERROR:",
+      error
+    );
+
+    const container =
+      $("signals");
+
+    if (container) {
+      container.textContent =
+        t("signalsUnavailable");
+    }
+  }
+}
+
+
+/* =========================================================
+   SUPPORT
+========================================================= */
+
+async function sendSupportMessage() {
+
+  if (
+    supportSubmitting ||
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+  const textarea =
+    $("supportText");
+
   const message =
-    $("supportText")?.value.trim() ||
+    textarea?.value.trim() ||
     "";
 
   if (!message) {
@@ -1756,13 +3150,12 @@ async function sendSupport() {
     return;
   }
 
-  supportSubmitting =
-    true;
-
   const button =
     $("supportBtn");
 
   try {
+
+    supportSubmitting = true;
 
     if (button) {
       button.disabled = true;
@@ -1795,9 +3188,8 @@ async function sendSupport() {
       "success"
     );
 
-    if ($("supportText")) {
-      $("supportText").value =
-        "";
+    if (textarea) {
+      textarea.value = "";
     }
 
   } catch (error) {
@@ -1815,8 +3207,7 @@ async function sendSupport() {
 
   } finally {
 
-    supportSubmitting =
-      false;
+    supportSubmitting = false;
 
     if (button) {
       button.disabled = false;
@@ -1826,1109 +3217,160 @@ async function sendSupport() {
 
 
 /* =========================================================
-   TIMEFRAME
+   EVENTS
 ========================================================= */
 
-function setupTimeframes() {
+function setupEvents() {
 
-  document
-    .querySelectorAll(
-      ".timeframeOption"
-    )
-    .forEach((button) => {
+  $("lang")?.addEventListener(
+    "change",
+    (event) => {
 
-      button.addEventListener(
-        "click",
-        () => {
-
-          if (
-            !currentUser?.approved
-          ) {
-            return;
-          }
-
-          selectedTimeframe =
-            button.dataset.timeframe ||
-            "1m";
-
-          const hidden =
-            $("selectedTimeframe");
-
-          if (hidden) {
-            hidden.value =
-              selectedTimeframe;
-          }
-
-          updateTimeframeButtons();
-
-          resetAnalysisResult();
-
-          showMessage(
-            "chartMsg",
-            ""
-          );
-        }
-      );
-    });
-
-  updateTimeframeButtons();
-}
-
-
-function updateTimeframeButtons() {
-
-  document
-    .querySelectorAll(
-      ".timeframeOption"
-    )
-    .forEach((button) => {
-
-      button.classList.toggle(
-        "active",
-        button.dataset.timeframe ===
-          selectedTimeframe
-      );
-    });
-
-  const hidden =
-    $("selectedTimeframe");
-
-  if (hidden) {
-    hidden.value =
-      selectedTimeframe;
-  }
-}
-
-
-/* =========================================================
-   CHART PREVIEW
-========================================================= */
-
-function previewChart(event) {
-
-  const file =
-    event.target.files?.[0];
-
-  selectedChartFile =
-    file || null;
-
-  const wrap =
-    $("chartPreviewWrap");
-
-  const preview =
-    $("chartPreview");
-
-  if (!file) {
-
-    wrap?.classList.add(
-      "hidden"
-    );
-
-    return;
-  }
-
-  if (
-    file.size >
-    5 * 1024 * 1024
-  ) {
-
-    selectedChartFile =
-      null;
-
-    event.target.value =
-      "";
-
-    wrap?.classList.add(
-      "hidden"
-    );
-
-    showMessage(
-      "chartMsg",
-      t("invalidImageSize"),
-      "error"
-    );
-
-    return;
-  }
-
-  const allowedTypes = [
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-    "image/gif"
-  ];
-
-  if (
-    !allowedTypes.includes(
-      file.type
-    )
-  ) {
-
-    selectedChartFile =
-      null;
-
-    event.target.value =
-      "";
-
-    wrap?.classList.add(
-      "hidden"
-    );
-
-    showMessage(
-      "chartMsg",
-      t("invalidImageType"),
-      "error"
-    );
-
-    return;
-  }
-
-  if (
-    !preview ||
-    !wrap
-  ) {
-    return;
-  }
-
-  const reader =
-    new FileReader();
-
-  reader.onload =
-    (loadEvent) => {
-
-      preview.src =
-        loadEvent.target.result;
-
-      wrap.classList.remove(
-        "hidden"
-      );
-    };
-
-  reader.readAsDataURL(
-    file
-  );
-}
-
-
-/* =========================================================
-   ANALYSIS RESET
-========================================================= */
-
-function resetAnalysisResult() {
-
-  const result =
-    $("analysisResult");
-
-  if (!result) {
-    return;
-  }
-
-  result.classList.add(
-    "hidden"
-  );
-
-  setText(
-    "analysisDirection",
-    t("wait")
-  );
-
-  setText(
-    "analysisSymbol",
-    "XAUUSD"
-  );
-
-  setText(
-    "analysisTimeframe",
-    selectedTimeframe.toUpperCase()
-  );
-
-  setText(
-    "analysisEntry",
-    t("wait")
-  );
-
-  setText(
-    "analysisSL",
-    t("wait")
-  );
-
-  setText(
-    "analysisTP1",
-    t("wait")
-  );
-
-  setText(
-    "analysisTP2",
-    t("wait")
-  );
-
-  setText(
-    "analysisTP3",
-    t("wait")
-  );
-
-  setText(
-    "analysisTP4",
-    t("wait")
-  );
-
-  setText(
-    "analysisTP5",
-    t("wait")
-  );
-
-  setText(
-    "analysisConfidence",
-    t("low")
-  );
-
-  setText(
-    "analysisTextContent",
-    ""
-  );
-
-  setText(
-    "analysisWarning",
-    ""
-  );
-
-  const card =
-    $("directionCard");
-
-  if (card) {
-
-    card.classList.remove(
-      "buy",
-      "sell",
-      "wait"
-    );
-
-    card.classList.add(
-      "wait"
-    );
-  }
-}
-
-
-/* =========================================================
-   ANALYZE CHART
-========================================================= */
-
-async function analyzeChart(event) {
-
-  event.preventDefault();
-
-  if (
-    analysisSubmitting ||
-    !currentUser?.approved
-  ) {
-    return;
-  }
-
-  const file =
-    selectedChartFile ||
-    $("chartFile")?.files?.[0];
-
-  if (!file) {
-
-    showMessage(
-      "chartMsg",
-      t("chartRequired"),
-      "error"
-    );
-
-    return;
-  }
-
-  if (
-    file.size >
-    5 * 1024 * 1024
-  ) {
-
-    showMessage(
-      "chartMsg",
-      t("invalidImageSize"),
-      "error"
-    );
-
-    return;
-  }
-
-  analysisSubmitting =
-    true;
-
-  const button =
-    $("analyzeBtn");
-
-  try {
-
-    if (button) {
-      button.disabled = true;
-    }
-
-    showMessage(
-      "chartMsg",
-      t("analysisLoading")
-    );
-
-    resetAnalysisResult();
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      "chart",
-      file
-    );
-
-    formData.append(
-      "timeframe",
-      selectedTimeframe
-    );
-
-    formData.append(
-      "language",
-      getLanguage()
-    );
-
-    const data =
-      await api(
-        "/api/analyze-chart",
-        {
-          method: "POST",
-          body: formData
-        }
+      setLanguage(
+        event.target.value
       );
 
-    let analysis =
-      data.analysis ||
-      data.result ||
-      data.signal ||
-      data.data ||
-      data;
-
-    if (
-      typeof analysis ===
-      "string"
-    ) {
-
-      try {
-
-        analysis =
-          JSON.parse(
-            analysis
-          );
-
-      } catch (_) {
-
-        analysis = {
-          analysis
-        };
+      if (
+        currentUser?.approved
+      ) {
+        loadHistory();
+        loadSignals();
       }
     }
+  );
 
-    if (
-      analysis?.analysis &&
-      typeof analysis.analysis ===
-        "object"
-    ) {
 
-      analysis =
-        analysis.analysis;
-    }
+  $("loginForm")?.addEventListener(
+    "submit",
+    loginUser
+  );
 
-    renderAnalysis(
-      analysis
-    );
 
-    showMessage(
-      "chartMsg",
-      data.message ||
-        t("analysisSuccess"),
-      "success"
-    );
+  $("registerForm")?.addEventListener(
+    "submit",
+    registerUser
+  );
 
-    await loadHistory();
 
-  } catch (error) {
+  $("logout")?.addEventListener(
+    "click",
+    logoutUser
+  );
 
-    console.error(
-      "ANALYSIS ERROR:",
-      error
-    );
 
-    showMessage(
-      "chartMsg",
-      error.message,
-      "error"
-    );
+  $("paymentForm")?.addEventListener(
+    "submit",
+    submitPayment
+  );
 
-  } finally {
 
-    analysisSubmitting =
-      false;
+  $("chartForm")?.addEventListener(
+    "submit",
+    analyzeChart
+  );
 
-    if (button) {
-      button.disabled = false;
-    }
-  }
+
+  $("supportBtn")?.addEventListener(
+    "click",
+    sendSupportMessage
+  );
 }
 
 
 /* =========================================================
-   RENDER ANALYSIS
-========================================================= */
-
-function renderAnalysis(
-  analysis
-) {
-
-  if (
-    !analysis ||
-    typeof analysis !==
-      "object"
-  ) {
-
-    showMessage(
-      "chartMsg",
-      "AI response could not be read.",
-      "error"
-    );
-
-    return;
-  }
-
-  const direction =
-    getField(
-      analysis,
-      [
-        "direction",
-        "Direction",
-        "signal",
-        "Signal",
-        "trade_direction",
-        "tradeDirection",
-        "action",
-        "Action",
-        "side",
-        "Side"
-      ],
-      "WAIT"
-    );
-
-  const symbol =
-    getField(
-      analysis,
-      [
-        "symbol",
-        "Symbol",
-        "pair",
-        "Pair",
-        "instrument",
-        "Instrument"
-      ],
-      "XAUUSD"
-    );
-
-  const timeframe =
-    getField(
-      analysis,
-      [
-        "timeframe",
-        "Timeframe",
-        "time_frame",
-        "interval",
-        "Interval"
-      ],
-      selectedTimeframe.toUpperCase()
-    );
-
-  const entry =
-    getField(
-      analysis,
-      [
-        "entry",
-        "Entry",
-        "entry_price",
-        "entryPrice",
-        "entry_point",
-        "entryPoint"
-      ]
-    );
-
-  const sl =
-    getField(
-      analysis,
-      [
-        "sl",
-        "SL",
-        "stop_loss",
-        "stopLoss",
-        "stoploss",
-        "stop_loss_price"
-      ]
-    );
-
-  const tp1 =
-    getField(
-      analysis,
-      [
-        "tp1",
-        "TP1",
-        "tp_1",
-        "take_profit_1",
-        "takeProfit1"
-      ]
-    );
-
-  const tp2 =
-    getField(
-      analysis,
-      [
-        "tp2",
-        "TP2",
-        "tp_2",
-        "take_profit_2",
-        "takeProfit2"
-      ]
-    );
-
-  const tp3 =
-    getField(
-      analysis,
-      [
-        "tp3",
-        "TP3",
-        "tp_3",
-        "take_profit_3",
-        "takeProfit3"
-      ]
-    );
-
-  const tp4 =
-    getField(
-      analysis,
-      [
-        "tp4",
-        "TP4",
-        "tp_4",
-        "take_profit_4",
-        "takeProfit4"
-      ]
-    );
-
-  const tp5 =
-    getField(
-      analysis,
-      [
-        "tp5",
-        "TP5",
-        "tp_5",
-        "take_profit_5",
-        "takeProfit5"
-      ]
-    );
-
-  const confidence =
-    getField(
-      analysis,
-      [
-        "confidence",
-        "Confidence",
-        "confidence_level",
-        "confidenceLevel"
-      ],
-      t("low")
-    );
-
-  const technical =
-    getField(
-      analysis,
-      [
-        "analysis",
-        "Analysis",
-        "commentary",
-        "Commentary",
-        "reason",
-        "Reason",
-        "reasoning",
-        "Reasoning",
-        "explanation",
-        "Explanation",
-        "market_analysis"
-      ],
-      ""
-    );
-
-  const warning =
-    getField(
-      analysis,
-      [
-        "warning",
-        "Warning",
-        "risk_warning",
-        "riskWarning"
-      ],
-      ""
-    );
-
-  setText(
-    "analysisDirection",
-    direction
-  );
-
-  setText(
-    "analysisSymbol",
-    symbol
-  );
-
-  setText(
-    "analysisTimeframe",
-    timeframe
-  );
-
-  setText(
-    "analysisEntry",
-    entry
-  );
-
-  setText(
-    "analysisSL",
-    sl
-  );
-
-  setText(
-    "analysisTP1",
-    tp1
-  );
-
-  setText(
-    "analysisTP2",
-    tp2
-  );
-
-  setText(
-    "analysisTP3",
-    tp3
-  );
-
-  setText(
-    "analysisTP4",
-    tp4
-  );
-
-  setText(
-    "analysisTP5",
-    tp5
-  );
-
-  setText(
-    "analysisConfidence",
-    confidence
-  );
-
-  setText(
-    "analysisTextContent",
-    technical,
-    ""
-  );
-
-  setText(
-    "analysisWarning",
-    warning,
-    ""
-  );
-
-  const card =
-    $("directionCard");
-
-  if (card) {
-
-    card.classList.remove(
-      "buy",
-      "sell",
-      "wait"
-    );
-
-    const normalized =
-      String(direction)
-        .toUpperCase()
-        .trim();
-
-    if (
-      normalized.includes("BUY")
-    ) {
-
-      card.classList.add(
-        "buy"
-      );
-
-    } else if (
-      normalized.includes("SELL")
-    ) {
-
-      card.classList.add(
-        "sell"
-      );
-
-    } else {
-
-      card.classList.add(
-        "wait"
-      );
-    }
-  }
-
-  const result =
-    $("analysisResult");
-
-  if (result) {
-    result.classList.remove(
-      "hidden"
-    );
-  }
-}
-
-
-/* =========================================================
-   SET TEXT
-========================================================= */
-
-function setText(
-  id,
-  value,
-  fallback = "WAIT"
-) {
-
-  const element =
-    $(id);
-
-  if (!element) {
-    return;
-  }
-
-  element.textContent =
-    textValue(
-      value,
-      fallback
-    );
-}
-
-
-/* =========================================================
-   HISTORY
-========================================================= */
-
-async function loadHistory() {
-
-  if (
-    !currentUser?.approved
-  ) {
-    return;
-  }
-
-  const container =
-    $("analysisHistory");
-
-  if (!container) {
-    return;
-  }
-
-  try {
-
-    const data =
-      await api(
-        "/api/analyses"
-      );
-
-    const items =
-      data.analyses ||
-      data.history ||
-      data.data ||
-      [];
-
-    if (
-      !Array.isArray(items) ||
-      items.length === 0
-    ) {
-
-      container.innerHTML =
-        `<p>${escapeHtml(
-          t("noHistory")
-        )}</p>`;
-
-      return;
-    }
-
-    container.innerHTML =
-      items
-        .map((item) => {
-
-          let analysis =
-            item.analysis ||
-            item.result ||
-            item;
-
-          if (
-            typeof analysis ===
-            "string"
-          ) {
-
-            try {
-
-              analysis =
-                JSON.parse(
-                  analysis
-                );
-
-            } catch (_) {
-
-              analysis = {};
-            }
-          }
-
-          const direction =
-            getField(
-              analysis,
-              [
-                "direction",
-                "Direction",
-                "signal",
-                "Signal",
-                "trade_direction",
-                "action",
-                "side"
-              ],
-              "WAIT"
-            );
-
-          const entry =
-            getField(
-              analysis,
-              [
-                "entry",
-                "Entry",
-                "entry_price",
-                "entryPrice"
-              ]
-            );
-
-          const sl =
-            getField(
-              analysis,
-              [
-                "sl",
-                "SL",
-                "stop_loss",
-                "stopLoss"
-              ]
-            );
-
-          const tp1 =
-            getField(
-              analysis,
-              [
-                "tp1",
-                "TP1",
-                "take_profit_1"
-              ]
-            );
-
-          const tp2 =
-            getField(
-              analysis,
-              [
-                "tp2",
-                "TP2",
-                "take_profit_2"
-              ]
-            );
-
-          const tp3 =
-            getField(
-              analysis,
-              [
-                "tp3",
-                "TP3",
-                "take_profit_3"
-              ]
-            );
-
-          const timeframe =
-            item.timeframe ||
-            analysis.timeframe ||
-            "-";
-
-          return `
-            <div class="history-item">
-
-              <div>
-                <strong>
-                  ${escapeHtml(direction)}
-                </strong>
-              </div>
-
-              <div>
-                ${escapeHtml(t("timeframe"))}:
-                ${escapeHtml(timeframe)}
-              </div>
-
-              <div>
-                ${escapeHtml(t("entryLabel"))}:
-                ${escapeHtml(entry)}
-              </div>
-
-              <div>
-                ${escapeHtml(t("slLabel"))}:
-                ${escapeHtml(sl)}
-              </div>
-
-              <div>
-                TP1:
-                ${escapeHtml(tp1)}
-              </div>
-
-              <div>
-                TP2:
-                ${escapeHtml(tp2)}
-              </div>
-
-              <div>
-                TP3:
-                ${escapeHtml(tp3)}
-              </div>
-
-            </div>
-          `;
-        })
-        .join("");
-
-  } catch (error) {
-
-    console.error(
-      "HISTORY ERROR:",
-      error
-    );
-
-    container.innerHTML =
-      `<p>${escapeHtml(
-        t("historyUnavailable")
-      )}</p>`;
-  }
-}
-
-
-/* =========================================================
-   SIGNALS
-========================================================= */
-
-async function loadSignals() {
-
-  if (
-    !currentUser?.approved
-  ) {
-    return;
-  }
-
-  const container =
-    $("signals");
-
-  if (!container) {
-    return;
-  }
-
-  try {
-
-    const data =
-      await api(
-        "/api/signals"
-      );
-
-    const signals =
-      data.signals ||
-      data.data ||
-      [];
-
-    if (
-      !Array.isArray(signals) ||
-      signals.length === 0
-    ) {
-
-      container.innerHTML =
-        `<p>${escapeHtml(
-          t("noSignals")
-        )}</p>`;
-
-      return;
-    }
-
-    container.innerHTML =
-      signals
-        .map(
-          (signal) => `
-            <div class="signal-item">
-
-              <h3>
-                ${escapeHtml(
-                  signal.title ||
-                  "XAUUSD Signal"
-                )}
-              </h3>
-
-              <p>
-                ${escapeHtml(
-                  signal.content ||
-                  signal.body ||
-                  ""
-                )}
-              </p>
-
-            </div>
-          `
-        )
-        .join("");
-
-  } catch (error) {
-
-    console.error(
-      "SIGNALS ERROR:",
-      error
-    );
-
-    container.innerHTML =
-      `<p>${escapeHtml(
-        t("signalsUnavailable")
-      )}</p>`;
-  }
-}
-
-
-/* =========================================================
-   MAIN LOAD
+   LOAD
 ========================================================= */
 
 async function load() {
 
+  setDisplay(
+    "auth",
+    false
+  );
+
+  setDisplay(
+    "dashboard",
+    true
+  );
+
+  updateUserHeader();
+
+  if (!currentUser) {
+
+    setDisplay(
+      "auth",
+      true
+    );
+
+    setDisplay(
+      "dashboard",
+      false
+    );
+
+    return;
+  }
+
   try {
 
-    const data =
-      await api(
-        "/api/me"
-      );
+    const access =
+      await refreshAccess();
 
-    currentUser =
-      data.user ||
-      null;
+    if (
+      currentUser &&
+      !currentUser.approved
+    ) {
 
-    const auth =
-      $("auth");
+      startAccessPolling();
 
-    const dashboard =
-      $("dashboard");
-
-    if (!currentUser) {
+    } else {
 
       stopAccessPolling();
+    }
+
+    return access;
+
+  } catch (error) {
+
+    console.error(
+      "LOAD ERROR:",
+      error
+    );
+
+    showMessage(
+      "authMsg",
+      error.message,
+      "error"
+    );
+  }
+}
+
+
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+
+async function init() {
+
+  setLanguage(
+    getLanguage()
+  );
+
+  setupAuthTabs();
+  setupPaymentMethods();
+  setupTimeframes();
+  setupChartUpload();
+  setupEvents();
+
+  try {
+
+    const user =
+      await getCurrentUser();
+
+    if (user) {
+
+      await load();
+
+    } else {
 
       setDisplay(
         "auth",
@@ -2939,33 +3381,16 @@ async function load() {
         "dashboard",
         false
       );
-
-      return;
     }
-
-    setDisplay(
-      "auth",
-      false
-    );
-
-    setDisplay(
-      "dashboard",
-      true
-    );
-
-    updateUserStatus();
-
-    await refreshAccess();
 
   } catch (error) {
 
     console.error(
-      "LOAD ERROR:",
+      "INIT ERROR:",
       error
     );
 
-    currentUser =
-      null;
+    currentUser = null;
 
     setDisplay(
       "auth",
@@ -2980,181 +3405,7 @@ async function load() {
 }
 
 
-/* =========================================================
-   LANGUAGE SELECTOR
-========================================================= */
-
-function setupLanguage() {
-
-  const language =
-    $("lang");
-
-  if (!language) {
-    return;
-  }
-
-  language.addEventListener(
-    "change",
-    () => {
-
-      setLanguage(
-        language.value
-      );
-
-      updateUserStatus();
-
-      if (
-        currentUser?.approved
-      ) {
-
-        loadHistory();
-        loadSignals();
-
-      } else if (
-        currentUser
-      ) {
-
-        refreshAccess();
-      }
-    }
-  );
-}
-
-
-/* =========================================================
-   EVENT LISTENERS
-========================================================= */
-
 document.addEventListener(
   "DOMContentLoaded",
-  () => {
-
-    /* Language */
-
-    setLanguage(
-      getLanguage()
-    );
-
-    setupLanguage();
-
-
-    /* Auth tabs */
-
-    setupAuthTabs();
-
-
-    /* Register */
-
-    const registerForm =
-      $("registerForm");
-
-    if (registerForm) {
-
-      registerForm.addEventListener(
-        "submit",
-        registerUser
-      );
-    }
-
-
-    /* Login */
-
-    const loginForm =
-      $("loginForm");
-
-    if (loginForm) {
-
-      loginForm.addEventListener(
-        "submit",
-        loginUser
-      );
-    }
-
-
-    /* Logout */
-
-    const logout =
-      $("logout");
-
-    if (logout) {
-
-      logout.addEventListener(
-        "click",
-        logoutUser
-      );
-    }
-
-
-    /* Payment */
-
-    const paymentForm =
-      $("paymentForm");
-
-    if (paymentForm) {
-
-      paymentForm.addEventListener(
-        "submit",
-        submitPayment
-      );
-    }
-
-    setupPaymentMethods();
-
-
-    /* Support */
-
-    const support =
-      $("supportBtn");
-
-    if (support) {
-
-      support.addEventListener(
-        "click",
-        sendSupport
-      );
-    }
-
-
-    /* Chart */
-
-    const chartFile =
-      $("chartFile");
-
-    if (chartFile) {
-
-      chartFile.addEventListener(
-        "change",
-        previewChart
-      );
-    }
-
-
-    /* Timeframe */
-
-    setupTimeframes();
-
-
-    /* AI */
-
-    const chartForm =
-      $("chartForm");
-
-    if (chartForm) {
-
-      chartForm.addEventListener(
-        "submit",
-        analyzeChart
-      );
-    }
-
-
-    /* Initial result */
-
-    resetAnalysisResult();
-
-
-    /* Initial load */
-
-    load();
-  }
+  init
 );
