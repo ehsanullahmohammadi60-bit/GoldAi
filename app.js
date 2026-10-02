@@ -196,7 +196,6 @@ const translations = {
     footerTitle: "GoldAI • خدمة تحليل XAUUSD بالذكاء الاصطناعي",
     footerWarning: "التداول ينطوي على مخاطر السوق. تحليل الذكاء الاصطناعي لا يضمن الربح."
   }
-
 };
 
 
@@ -205,16 +204,9 @@ const translations = {
 ========================================================= */
 
 function getLanguage() {
+  const saved = localStorage.getItem("goldai_language");
 
-  const saved =
-    localStorage.getItem(
-      "goldai_language"
-    );
-
-  if (
-    saved &&
-    translations[saved]
-  ) {
+  if (saved && translations[saved]) {
     return saved;
   }
 
@@ -222,11 +214,14 @@ function getLanguage() {
 }
 
 
+function currentLanguage() {
+  return getLanguage();
+}
+
+
 function setLanguage(language) {
 
-  if (
-    !translations[language]
-  ) {
+  if (!translations[language]) {
     language = "fa";
   }
 
@@ -235,86 +230,48 @@ function setLanguage(language) {
     language
   );
 
-  const html =
-    document.documentElement;
+  document.documentElement.lang = language;
+  document.documentElement.dir =
+    language === "en" ? "ltr" : "rtl";
 
-  html.lang =
-    language;
-
-  html.dir =
-    language === "en"
-      ? "ltr"
-      : "rtl";
-
-  const select =
-    $("lang");
+  const select = $("lang");
 
   if (select) {
-    select.value =
-      language;
+    select.value = language;
   }
 
   document
-    .querySelectorAll(
-      "[data-i18n]"
-    )
-    .forEach(
-      (element) => {
+    .querySelectorAll("[data-i18n]")
+    .forEach((element) => {
 
-        const key =
-          element.dataset.i18n;
+      const key = element.dataset.i18n;
 
-        if (
-          translations[language][key] !==
-          undefined
-        ) {
-
-          element.textContent =
-            translations[language][key];
-
-        }
-
+      if (translations[language][key] !== undefined) {
+        element.textContent =
+          translations[language][key];
       }
-    );
 
+    });
 
   document
-    .querySelectorAll(
-      "[data-i18n-placeholder]"
-    )
-    .forEach(
-      (element) => {
+    .querySelectorAll("[data-i18n-placeholder]")
+    .forEach((element) => {
 
-        const key =
-          element.dataset.i18nPlaceholder;
+      const key =
+        element.dataset.i18nPlaceholder;
 
-        if (
-          translations[language][key] !==
-          undefined
-        ) {
-
-          element.placeholder =
-            translations[language][key];
-
-        }
-
+      if (translations[language][key] !== undefined) {
+        element.placeholder =
+          translations[language][key];
       }
-    );
 
+    });
 
   renderPaymentDetails();
 
   if (currentUser) {
     renderStatus();
   }
-
-}
-
-
-function currentLanguage() {
-
-  return getLanguage();
-
 }
 
 
@@ -322,10 +279,7 @@ function currentLanguage() {
    HELPERS
 ========================================================= */
 
-function textValue(
-  value,
-  fallback = "—"
-) {
+function textValue(value, fallback = "—") {
 
   if (
     value === null ||
@@ -341,11 +295,8 @@ function textValue(
 
 function escapeHtml(value) {
 
-  return String(
-    value ?? ""
-  ).replace(
-    /[&<>"']/g,
-    (character) => {
+  return String(value ?? "")
+    .replace(/[&<>"']/g, (character) => {
 
       return {
         "&": "&amp;",
@@ -355,9 +306,7 @@ function escapeHtml(value) {
         "'": "&#039;"
       }[character];
 
-    }
-  );
-
+    });
 }
 
 
@@ -367,14 +316,9 @@ function formatDate(value) {
     return "";
   }
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return String(value);
   }
 
@@ -385,7 +329,6 @@ function formatDate(value) {
         ? "ar"
         : "en-US"
   );
-
 }
 
 
@@ -397,12 +340,7 @@ function timeframeLabel(value) {
     "15m": "15M"
   };
 
-  return (
-    labels[value] ||
-    value ||
-    "—"
-  );
-
+  return labels[value] || value || "—";
 }
 
 
@@ -410,46 +348,28 @@ function timeframeLabel(value) {
    API
 ========================================================= */
 
-async function api(
-  url,
-  options = {}
-) {
+async function api(url, options = {}) {
 
-  const response =
-    await fetch(
-      url,
-      {
-        credentials: "include",
-        ...options
-      }
-    );
+  const response = await fetch(url, {
+    credentials: "include",
+    ...options
+  });
 
   let data = {};
 
   try {
-
-    data =
-      await response.json();
-
+    data = await response.json();
   } catch (_) {
-
     data = {};
-
   }
 
-  if (
-    !response.ok
-  ) {
-
+  if (!response.ok) {
     throw new Error(
-      data.error ||
-      "Request failed."
+      data.error || "Request failed."
     );
-
   }
 
   return data;
-
 }
 
 
@@ -457,183 +377,200 @@ async function api(
    AUTH TABS
 ========================================================= */
 
-function showAuthTab(
-  tab
-) {
+function showAuthTab(tab) {
 
-  const loginForm =
-    $("loginForm");
-
-  const registerForm =
-    $("registerForm");
+  const loginForm = $("loginForm");
+  const registerForm = $("registerForm");
 
   document
-    .querySelectorAll(
-      ".tab[data-tab]"
-    )
-    .forEach(
-      (button) => {
+    .querySelectorAll(".tab[data-tab]")
+    .forEach((button) => {
 
-        button.classList.toggle(
-          "active",
-          button.dataset.tab ===
-            tab
-        );
+      button.classList.toggle(
+        "active",
+        button.dataset.tab === tab
+      );
 
-      }
-    );
-
+    });
 
   if (loginForm) {
-
     loginForm.classList.toggle(
       "hidden",
       tab !== "login"
     );
-
   }
 
-
   if (registerForm) {
-
     registerForm.classList.toggle(
       "hidden",
       tab !== "register"
     );
-
   }
-
 }
 
 
-/* =========================================================
-   AUTH MESSAGE
-========================================================= */
+function authMessage(message) {
 
-function authMessage(
-  message
-) {
-
-  const element =
-    $("authMsg");
+  const element = $("authMsg");
 
   if (element) {
-    element.textContent =
-      message || "";
+    element.textContent = message || "";
   }
-
 }
 
 
 /* =========================================================
    PAYMENT DETAILS
+   REAL ACCOUNT IDS
 ========================================================= */
 
 function renderPaymentDetails() {
 
-  const details =
-    $("payDetails");
+  const details = $("payDetails");
 
   if (!details) {
     return;
   }
 
-  if (
-    selectedPaymentMethod ===
-    "binance"
-  ) {
+  const language = currentLanguage();
 
-    details.innerHTML = `
-      <strong>Binance Pay</strong>
-      <br>
-      Amount: <strong>4 USD / USDT</strong>
-      <br>
-      Please complete the payment using the Binance Pay details provided by the administrator.
-    `;
+  if (selectedPaymentMethod === "binance") {
+
+    if (language === "en") {
+
+      details.innerHTML = `
+        <strong>Binance Pay</strong>
+        <br>
+        Amount: <strong>4 USD / USDT</strong>
+        <br>
+        <strong>Binance Pay ID:</strong>
+        <br>
+        <span class="payment-id">760897285</span>
+        <br>
+        Please send the payment to this Binance Pay ID.
+      `;
+
+    } else if (language === "ar") {
+
+      details.innerHTML = `
+        <strong>Binance Pay</strong>
+        <br>
+        المبلغ: <strong>4 USD / USDT</strong>
+        <br>
+        <strong>معرّف Binance Pay:</strong>
+        <br>
+        <span class="payment-id">760897285</span>
+        <br>
+        يرجى إرسال الدفع إلى معرّف Binance Pay هذا.
+      `;
+
+    } else {
+
+      details.innerHTML = `
+        <strong>Binance Pay</strong>
+        <br>
+        مبلغ: <strong>4 USD / USDT</strong>
+        <br>
+        <strong>آیدی Binance Pay:</strong>
+        <br>
+        <span class="payment-id">760897285</span>
+        <br>
+        لطفاً مبلغ را به همین آیدی Binance Pay ارسال کنید.
+      `;
+    }
 
   } else {
 
-    details.innerHTML = `
-      <strong>HesabPay</strong>
-      <br>
-      Amount: <strong>240 AFN</strong>
-      <br>
-      Please complete the payment using the HesabPay details provided by the administrator.
-    `;
+    if (language === "en") {
 
+      details.innerHTML = `
+        <strong>HesabPay</strong>
+        <br>
+        Amount: <strong>240 AFN</strong>
+        <br>
+        <strong>HesabPay ID:</strong>
+        <br>
+        <span class="payment-id">9004134056412319</span>
+        <br>
+        Please send the payment to this HesabPay ID.
+      `;
+
+    } else if (language === "ar") {
+
+      details.innerHTML = `
+        <strong>HesabPay</strong>
+        <br>
+        المبلغ: <strong>240 AFN</strong>
+        <br>
+        <strong>معرّف HesabPay:</strong>
+        <br>
+        <span class="payment-id">9004134056412319</span>
+        <br>
+        يرجى إرسال الدفع إلى معرّف HesabPay هذا.
+      `;
+
+    } else {
+
+      details.innerHTML = `
+        <strong>HesabPay</strong>
+        <br>
+        مبلغ: <strong>240 AFN</strong>
+        <br>
+        <strong>آیدی حساب‌پی:</strong>
+        <br>
+        <span class="payment-id">9004134056412319</span>
+        <br>
+        لطفاً مبلغ را به همین آیدی حساب‌پی ارسال کنید.
+      `;
+    }
   }
-
 }
 
 
 /* =========================================================
-   RENDER STATUS
+   STATUS
 ========================================================= */
 
 function renderStatus() {
 
-  const status =
-    $("status");
+  const status = $("status");
 
   if (!status) {
     return;
   }
 
-  const language =
-    currentLanguage();
+  const language = currentLanguage();
 
-  if (
-    currentUser?.approved
-  ) {
+  if (currentUser?.approved) {
 
     if (language === "en") {
-
       status.textContent =
         "✓ Your account is approved. All member features are available.";
-
-    } else if (
-      language === "ar"
-    ) {
-
+    } else if (language === "ar") {
       status.textContent =
         "✓ تم اعتماد حسابك. جميع ميزات الأعضاء متاحة.";
-
     } else {
-
       status.textContent =
         "✓ حساب شما تأیید شده است. تمام امکانات اعضا فعال است.";
-
     }
 
-    status.className =
-      "statusApproved";
+    status.className = "statusApproved";
 
   } else {
 
     if (language === "en") {
-
       status.textContent =
         "Access locked — payment approval is required.";
-
-    } else if (
-      language === "ar"
-    ) {
-
+    } else if (language === "ar") {
       status.textContent =
         "الوصول مقفل — يجب اعتماد الدفع أولاً.";
-
     } else {
-
       status.textContent =
         "دسترسی قفل است — ابتدا پرداخت شما باید تأیید شود.";
-
     }
 
-    status.className =
-      "statusLocked";
-
+    status.className = "statusLocked";
   }
-
 }
 
 
@@ -641,38 +578,21 @@ function renderStatus() {
    LOCKED STATE
 ========================================================= */
 
-function renderLockedState(
-  paymentStatus = null
-) {
+function renderLockedState(paymentStatus = null) {
 
-  const payPanel =
-    $("payPanel");
-
-  const approvedNotice =
-    $("approvedNotice");
-
-  const aiPanel =
-    $("aiPanel");
-
-  const historyPanel =
-    $("historyPanel");
-
-  const signalsPanel =
-    $("signalsPanel");
-
-  const supportPanel =
-    $("supportPanel");
+  const payPanel = $("payPanel");
+  const approvedNotice = $("approvedNotice");
+  const aiPanel = $("aiPanel");
+  const historyPanel = $("historyPanel");
+  const signalsPanel = $("signalsPanel");
+  const supportPanel = $("supportPanel");
 
   if (payPanel) {
-    payPanel.classList.remove(
-      "hidden"
-    );
+    payPanel.classList.remove("hidden");
   }
 
   if (approvedNotice) {
-    approvedNotice.classList.add(
-      "hidden"
-    );
+    approvedNotice.classList.add("hidden");
   }
 
   [
@@ -680,111 +600,49 @@ function renderLockedState(
     historyPanel,
     signalsPanel,
     supportPanel
-  ].forEach(
-    (element) => {
+  ].forEach((element) => {
 
-      if (element) {
-        element.classList.add(
-          "hidden"
-        );
-      }
-
-    }
-  );
-
-
-  const lockNotice =
-    $("paymentLockNotice");
-
-  if (lockNotice) {
-
-    const language =
-      currentLanguage();
-
-    let message = "";
-
-    if (
-      paymentStatus ===
-      "pending"
-    ) {
-
-      if (
-        language === "en"
-      ) {
-
-        message =
-          "Your payment receipt has been submitted and is waiting for administrator approval.";
-
-      } else if (
-        language === "ar"
-      ) {
-
-        message =
-          "تم إرسال إيصال الدفع الخاص بك وهو بانتظار موافقة الإدارة.";
-
-      } else {
-
-        message =
-          "رسید پرداخت شما ارسال شده و منتظر تأیید مدیر است.";
-
-      }
-
-    } else if (
-      paymentStatus ===
-      "rejected"
-    ) {
-
-      if (
-        language === "en"
-      ) {
-
-        message =
-          "Your previous payment request was rejected. Please submit a new valid payment receipt.";
-
-      } else if (
-        language === "ar"
-      ) {
-
-        message =
-          "تم رفض طلب الدفع السابق. يرجى إرسال إيصال دفع صالح جديد.";
-
-      } else {
-
-        message =
-          "درخواست پرداخت قبلی شما رد شده است. لطفاً رسید معتبر جدید ارسال کنید.";
-
-      }
-
-    } else {
-
-      if (
-        language === "en"
-      ) {
-
-        message =
-          "Complete the payment and submit your receipt. Your account will remain locked until approval.";
-
-      } else if (
-        language === "ar"
-      ) {
-
-        message =
-          "أكمل الدفع وأرسل الإيصال. سيبقى حسابك مقفلاً حتى الموافقة.";
-
-      } else {
-
-        message =
-          "پرداخت را انجام دهید و رسید را ارسال کنید. حساب شما تا زمان تأیید قفل خواهد بود.";
-
-      }
-
+    if (element) {
+      element.classList.add("hidden");
     }
 
-    lockNotice.textContent =
-      message;
+  });
 
+  const lockNotice = $("paymentLockNotice");
+
+  if (!lockNotice) {
+    return;
   }
 
+  const language = currentLanguage();
+
+  if (paymentStatus === "pending") {
+
+    lockNotice.textContent =
+      language === "en"
+        ? "Your payment receipt has been submitted and is waiting for administrator approval."
+        : language === "ar"
+          ? "تم إرسال إيصال الدفع الخاص بك وهو بانتظار موافقة الإدارة."
+          : "رسید پرداخت شما ارسال شده و منتظر تأیید مدیر است.";
+
+  } else if (paymentStatus === "rejected") {
+
+    lockNotice.textContent =
+      language === "en"
+        ? "Your previous payment request was rejected. Please submit a new valid payment receipt."
+        : language === "ar"
+          ? "تم رفض طلب الدفع السابق. يرجى إرسال إيصال دفع صالح جديد."
+          : "درخواست پرداخت قبلی شما رد شده است. لطفاً رسید معتبر جدید ارسال کنید.";
+
+  } else {
+
+    lockNotice.textContent =
+      language === "en"
+        ? "Complete the payment and submit your receipt. Your account will remain locked until approval."
+        : language === "ar"
+          ? "أكمل الدفع وأرسل الإيصال. سيبقى حسابك مقفلاً حتى الموافقة."
+          : "پرداخت را انجام دهید و رسید را ارسال کنید. حساب شما تا زمان تأیید قفل خواهد بود.";
+  }
 }
 
 
@@ -794,98 +652,51 @@ function renderLockedState(
 
 function renderApprovedState() {
 
-  const payPanel =
-    $("payPanel");
-
-  const approvedNotice =
-    $("approvedNotice");
-
-  const aiPanel =
-    $("aiPanel");
-
-  const historyPanel =
-    $("historyPanel");
-
-  const signalsPanel =
-    $("signalsPanel");
-
-  const supportPanel =
-    $("supportPanel");
-
-
-  /*
-    Approved users must never see
-    payment methods again.
-  */
+  const payPanel = $("payPanel");
+  const approvedNotice = $("approvedNotice");
+  const aiPanel = $("aiPanel");
+  const historyPanel = $("historyPanel");
+  const signalsPanel = $("signalsPanel");
+  const supportPanel = $("supportPanel");
 
   if (payPanel) {
-    payPanel.classList.add(
-      "hidden"
-    );
+    payPanel.classList.add("hidden");
   }
 
   if (approvedNotice) {
-    approvedNotice.classList.remove(
-      "hidden"
-    );
+    approvedNotice.classList.remove("hidden");
   }
 
   if (aiPanel) {
-    aiPanel.classList.remove(
-      "hidden"
-    );
+    aiPanel.classList.remove("hidden");
   }
 
   if (historyPanel) {
-    historyPanel.classList.remove(
-      "hidden"
-    );
+    historyPanel.classList.remove("hidden");
   }
 
   if (signalsPanel) {
-    signalsPanel.classList.remove(
-      "hidden"
-    );
+    signalsPanel.classList.remove("hidden");
   }
 
   if (supportPanel) {
-    supportPanel.classList.remove(
-      "hidden"
-    );
+    supportPanel.classList.remove("hidden");
   }
 
+  const notice = $("approvedNoticeText");
 
-  const notice =
-    $("approvedNoticeText");
-
-  if (notice) {
-
-    const language =
-      currentLanguage();
-
-    if (
-      language === "en"
-    ) {
-
-      notice.textContent =
-        "Your payment has been approved. Payment options are no longer displayed because your account already has access.";
-
-    } else if (
-      language === "ar"
-    ) {
-
-      notice.textContent =
-        "تمت الموافقة على دفعتك. لن تظهر خيارات الدفع مرة أخرى لأن حسابك لديه صلاحية الوصول.";
-
-    } else {
-
-      notice.textContent =
-        "پرداخت شما تأیید شده است. چون حساب شما دسترسی دارد، گزینه‌های پرداخت دیگر نمایش داده نمی‌شوند.";
-
-    }
-
+  if (!notice) {
+    return;
   }
 
+  const language = currentLanguage();
+
+  notice.textContent =
+    language === "en"
+      ? "Your payment has been approved. Payment options are no longer displayed because your account already has access."
+      : language === "ar"
+        ? "تمت الموافقة على دفعتك. لن تظهر خيارات الدفع مرة أخرى لأن حسابك لديه صلاحية الوصول."
+        : "پرداخت شما تأیید شده است. چون حساب شما دسترسی دارد، گزینه‌های پرداخت دیگر نمایش داده نمی‌شوند.";
 }
 
 
@@ -901,21 +712,11 @@ async function refreshAccess() {
 
   try {
 
-    const data =
-      await api(
-        "/api/access"
-      );
+    const data = await api("/api/access");
 
-
-    if (
-      data.user
-    ) {
-
-      currentUser =
-        data.user;
-
+    if (data.user) {
+      currentUser = data.user;
     }
-
 
     currentUser.approved =
       Boolean(
@@ -923,13 +724,9 @@ async function refreshAccess() {
         currentUser.approved
       );
 
-
     renderStatus();
 
-
-    if (
-      currentUser.approved
-    ) {
+    if (currentUser.approved) {
 
       renderApprovedState();
 
@@ -945,7 +742,6 @@ async function refreshAccess() {
       );
 
       startAccessPolling();
-
     }
 
   } catch (error) {
@@ -954,9 +750,7 @@ async function refreshAccess() {
       "ACCESS ERROR",
       error
     );
-
   }
-
 }
 
 
@@ -966,50 +760,40 @@ async function refreshAccess() {
 
 function startAccessPolling() {
 
-  if (
-    accessPollTimer
-  ) {
+  if (accessPollTimer) {
     return;
   }
 
-  accessPollTimer =
-    setInterval(
-      async () => {
+  accessPollTimer = setInterval(
+    async () => {
 
-        if (
-          !currentUser ||
-          currentUser.approved
-        ) {
+      if (
+        !currentUser ||
+        currentUser.approved
+      ) {
 
-          stopAccessPolling();
-          return;
+        stopAccessPolling();
+        return;
+      }
 
-        }
+      await refreshAccess();
 
-        await refreshAccess();
-
-      },
-      15000
-    );
-
+    },
+    15000
+  );
 }
 
 
 function stopAccessPolling() {
 
-  if (
-    accessPollTimer
-  ) {
+  if (accessPollTimer) {
 
     clearInterval(
       accessPollTimer
     );
 
-    accessPollTimer =
-      null;
-
+    accessPollTimer = null;
   }
-
 }
 
 
@@ -1017,28 +801,19 @@ function stopAccessPolling() {
    LOGIN
 ========================================================= */
 
-async function login(
-  event
-) {
+async function login(event) {
 
   event.preventDefault();
 
   authMessage("");
 
   const email =
-    $("loginEmail")
-      ?.value
-      .trim();
+    $("loginEmail")?.value.trim();
 
   const password =
-    $("loginPass")
-      ?.value || "";
+    $("loginPass")?.value || "";
 
-
-  if (
-    !email ||
-    !password
-  ) {
+  if (!email || !password) {
 
     authMessage(
       currentLanguage() === "en"
@@ -1049,9 +824,7 @@ async function login(
     );
 
     return;
-
   }
-
 
   const button =
     $("loginForm")
@@ -1060,53 +833,39 @@ async function login(
       );
 
   if (button) {
-    button.disabled =
-      true;
+    button.disabled = true;
   }
-
 
   try {
 
-    const data =
-      await api(
-        "/api/login",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              email,
-              password
-            })
-        }
-      );
-
+    const data = await api(
+      "/api/login",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          email,
+          password
+        })
+      }
+    );
 
     currentUser =
-      data.user ||
-      null;
-
+      data.user || null;
 
     if (!currentUser) {
-
       throw new Error(
         "Login succeeded but user data was not returned."
       );
-
     }
-
 
     authMessage("");
 
     await showDashboard();
-
     await refreshAccess();
-
 
   } catch (error) {
 
@@ -1117,12 +876,9 @@ async function login(
   } finally {
 
     if (button) {
-      button.disabled =
-        false;
+      button.disabled = false;
     }
-
   }
-
 }
 
 
@@ -1130,34 +886,22 @@ async function login(
    REGISTER
 ========================================================= */
 
-async function register(
-  event
-) {
+async function register(event) {
 
   event.preventDefault();
 
   authMessage("");
 
   const name =
-    $("regName")
-      ?.value
-      .trim();
+    $("regName")?.value.trim();
 
   const email =
-    $("regEmail")
-      ?.value
-      .trim();
+    $("regEmail")?.value.trim();
 
   const password =
-    $("regPass")
-      ?.value || "";
+    $("regPass")?.value || "";
 
-
-  if (
-    !name ||
-    !email ||
-    !password
-  ) {
+  if (!name || !email || !password) {
 
     authMessage(
       currentLanguage() === "en"
@@ -1168,13 +912,9 @@ async function register(
     );
 
     return;
-
   }
 
-
-  if (
-    password.length < 6
-  ) {
+  if (password.length < 6) {
 
     authMessage(
       currentLanguage() === "en"
@@ -1185,9 +925,7 @@ async function register(
     );
 
     return;
-
   }
-
 
   const button =
     $("registerForm")
@@ -1196,54 +934,40 @@ async function register(
       );
 
   if (button) {
-    button.disabled =
-      true;
+    button.disabled = true;
   }
-
 
   try {
 
-    const data =
-      await api(
-        "/api/register",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              name,
-              email,
-              password
-            })
-        }
-      );
-
+    const data = await api(
+      "/api/register",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password
+        })
+      }
+    );
 
     currentUser =
-      data.user ||
-      null;
-
+      data.user || null;
 
     if (!currentUser) {
-
       throw new Error(
         "Account created but user data was not returned."
       );
-
     }
-
 
     authMessage("");
 
     await showDashboard();
-
     await refreshAccess();
-
 
   } catch (error) {
 
@@ -1254,12 +978,9 @@ async function register(
   } finally {
 
     if (button) {
-      button.disabled =
-        false;
+      button.disabled = false;
     }
-
   }
-
 }
 
 
@@ -1282,32 +1003,21 @@ async function logout() {
 
   } catch (_) {}
 
-  currentUser =
-    null;
+  currentUser = null;
+  selectedChartFile = null;
 
-  selectedChartFile =
-    null;
-
-  const dashboard =
-    $("dashboard");
-
-  const auth =
-    $("auth");
+  const dashboard = $("dashboard");
+  const auth = $("auth");
 
   if (dashboard) {
-    dashboard.classList.add(
-      "hidden"
-    );
+    dashboard.classList.add("hidden");
   }
 
   if (auth) {
-    auth.classList.remove(
-      "hidden"
-    );
+    auth.classList.remove("hidden");
   }
 
   showAuthTab("login");
-
 }
 
 
@@ -1317,26 +1027,18 @@ async function logout() {
 
 async function showDashboard() {
 
-  const auth =
-    $("auth");
-
-  const dashboard =
-    $("dashboard");
+  const auth = $("auth");
+  const dashboard = $("dashboard");
 
   if (auth) {
-    auth.classList.add(
-      "hidden"
-    );
+    auth.classList.add("hidden");
   }
 
   if (dashboard) {
-    dashboard.classList.remove(
-      "hidden"
-    );
+    dashboard.classList.remove("hidden");
   }
 
   renderStatus();
-
 }
 
 
@@ -1344,13 +1046,9 @@ async function showDashboard() {
    PAYMENT METHOD
 ========================================================= */
 
-function selectPaymentMethod(
-  method
-) {
+function selectPaymentMethod(method) {
 
-  if (
-    currentUser?.approved
-  ) {
+  if (currentUser?.approved) {
     return;
   }
 
@@ -1361,29 +1059,20 @@ function selectPaymentMethod(
     return;
   }
 
-  selectedPaymentMethod =
-    method;
-
+  selectedPaymentMethod = method;
 
   document
-    .querySelectorAll(
-      ".pay[data-method]"
-    )
-    .forEach(
-      (button) => {
+    .querySelectorAll(".pay[data-method]")
+    .forEach((button) => {
 
-        button.classList.toggle(
-          "active",
-          button.dataset.method ===
-            method
-        );
+      button.classList.toggle(
+        "active",
+        button.dataset.method === method
+      );
 
-      }
-    );
-
+    });
 
   renderPaymentDetails();
-
 }
 
 
@@ -1391,42 +1080,27 @@ function selectPaymentMethod(
    PAYMENT
 ========================================================= */
 
-async function submitPayment(
-  event
-) {
+async function submitPayment(event) {
 
   event.preventDefault();
 
-  if (
-    paymentSubmitting
-  ) {
+  if (paymentSubmitting) {
     return;
   }
 
-  if (
-    !currentUser
-  ) {
+  if (!currentUser) {
     return;
   }
 
-  if (
-    currentUser.approved
-  ) {
-
+  if (currentUser.approved) {
     return;
-
   }
-
 
   const reference =
-    $("reference")
-      ?.value
-      .trim();
+    $("reference")?.value.trim();
 
   const receipt =
-    $("receipt")
-      ?.files?.[0];
-
+    $("receipt")?.files?.[0];
 
   if (!reference) {
 
@@ -1438,9 +1112,7 @@ async function submitPayment(
           : "شماره تراکنش الزامی است.";
 
     return;
-
   }
-
 
   if (!receipt) {
 
@@ -1452,9 +1124,7 @@ async function submitPayment(
           : "لطفاً رسید پرداخت خود را انتخاب کنید.";
 
     return;
-
   }
-
 
   const allowedTypes = [
     "image/png",
@@ -1463,12 +1133,7 @@ async function submitPayment(
     "image/gif"
   ];
 
-
-  if (
-    !allowedTypes.includes(
-      receipt.type
-    )
-  ) {
+  if (!allowedTypes.includes(receipt.type)) {
 
     $("payMsg").textContent =
       currentLanguage() === "en"
@@ -1478,14 +1143,9 @@ async function submitPayment(
           : "فقط تصاویر PNG، JPG، WEBP و GIF مجاز است.";
 
     return;
-
   }
 
-
-  if (
-    receipt.size >
-    5 * 1024 * 1024
-  ) {
+  if (receipt.size > 5 * 1024 * 1024) {
 
     $("payMsg").textContent =
       currentLanguage() === "en"
@@ -1495,13 +1155,9 @@ async function submitPayment(
           : "حجم رسید باید کمتر از ۵ مگابایت باشد.";
 
     return;
-
   }
 
-
-  paymentSubmitting =
-    true;
-
+  paymentSubmitting = true;
 
   const button =
     $("paymentForm")
@@ -1510,10 +1166,8 @@ async function submitPayment(
       );
 
   if (button) {
-    button.disabled =
-      true;
+    button.disabled = true;
   }
-
 
   $("payMsg").textContent =
     currentLanguage() === "en"
@@ -1522,11 +1176,9 @@ async function submitPayment(
         ? "جارٍ إرسال إيصال الدفع..."
         : "در حال ارسال رسید پرداخت...";
 
-
   try {
 
-    const formData =
-      new FormData();
+    const formData = new FormData();
 
     formData.append(
       "method",
@@ -1543,16 +1195,13 @@ async function submitPayment(
       receipt
     );
 
-
-    const data =
-      await api(
-        "/api/payment",
-        {
-          method: "POST",
-          body: formData
-        }
-      );
-
+    const data = await api(
+      "/api/payment",
+      {
+        method: "POST",
+        body: formData
+      }
+    );
 
     $("payMsg").textContent =
       data.message ||
@@ -1564,9 +1213,7 @@ async function submitPayment(
             : "رسید پرداخت با موفقیت ارسال شد."
       );
 
-
     await refreshAccess();
-
 
   } catch (error) {
 
@@ -1575,16 +1222,12 @@ async function submitPayment(
 
   } finally {
 
-    paymentSubmitting =
-      false;
+    paymentSubmitting = false;
 
     if (button) {
-      button.disabled =
-        false;
+      button.disabled = false;
     }
-
   }
-
 }
 
 
@@ -1592,9 +1235,7 @@ async function submitPayment(
    TIMEFRAME
 ========================================================= */
 
-function selectTimeframe(
-  timeframe
-) {
+function selectTimeframe(timeframe) {
 
   if (
     !["1m", "5m", "15m"]
@@ -1603,35 +1244,25 @@ function selectTimeframe(
     return;
   }
 
-  selectedTimeframe =
-    timeframe;
-
+  selectedTimeframe = timeframe;
 
   const hidden =
     $("selectedTimeframe");
 
   if (hidden) {
-    hidden.value =
-      timeframe;
+    hidden.value = timeframe;
   }
 
-
   document
-    .querySelectorAll(
-      ".timeframeOption"
-    )
-    .forEach(
-      (button) => {
+    .querySelectorAll(".timeframeOption")
+    .forEach((button) => {
 
-        button.classList.toggle(
-          "active",
-          button.dataset.timeframe ===
-            timeframe
-        );
+      button.classList.toggle(
+        "active",
+        button.dataset.timeframe === timeframe
+      );
 
-      }
-    );
-
+    });
 }
 
 
@@ -1639,22 +1270,16 @@ function selectTimeframe(
    CHART FILE
 ========================================================= */
 
-function handleChartFile(
-  event
-) {
+function handleChartFile(event) {
 
   const file =
     event.target.files?.[0];
 
-
-  selectedChartFile =
-    null;
-
+  selectedChartFile = null;
 
   if (!file) {
     return;
   }
-
 
   const allowedTypes = [
     "image/png",
@@ -1663,12 +1288,7 @@ function handleChartFile(
     "image/gif"
   ];
 
-
-  if (
-    !allowedTypes.includes(
-      file.type
-    )
-  ) {
+  if (!allowedTypes.includes(file.type)) {
 
     $("chartMsg").textContent =
       currentLanguage() === "en"
@@ -1680,14 +1300,9 @@ function handleChartFile(
     event.target.value = "";
 
     return;
-
   }
 
-
-  if (
-    file.size >
-    5 * 1024 * 1024
-  ) {
+  if (file.size > 5 * 1024 * 1024) {
 
     $("chartMsg").textContent =
       currentLanguage() === "en"
@@ -1699,53 +1314,29 @@ function handleChartFile(
     event.target.value = "";
 
     return;
-
   }
 
+  selectedChartFile = file;
 
-  selectedChartFile =
-    file;
+  const preview = $("chartPreview");
+  const wrap = $("chartPreviewWrap");
 
-
-  const preview =
-    $("chartPreview");
-
-  const wrap =
-    $("chartPreviewWrap");
-
-
-  if (
-    preview &&
-    wrap
-  ) {
+  if (preview && wrap) {
 
     const url =
-      URL.createObjectURL(
-        file
-      );
+      URL.createObjectURL(file);
 
-    preview.src =
-      url;
+    preview.src = url;
 
-    wrap.classList.remove(
-      "hidden"
-    );
+    wrap.classList.remove("hidden");
 
-    preview.onload =
-      () => {
-
-        URL.revokeObjectURL(
-          url
-        );
-
-      };
-
+    preview.onload = () => {
+      URL.revokeObjectURL(url);
+    };
   }
-
 
   $("chartMsg").textContent =
     file.name;
-
 }
 
 
@@ -1753,15 +1344,11 @@ function handleChartFile(
    ANALYZE CHART
 ========================================================= */
 
-async function analyzeChart(
-  event
-) {
+async function analyzeChart(event) {
 
   event.preventDefault();
 
-  if (
-    analysisSubmitting
-  ) {
+  if (analysisSubmitting) {
     return;
   }
 
@@ -1769,17 +1356,12 @@ async function analyzeChart(
     !currentUser ||
     !currentUser.approved
   ) {
-
     return;
-
   }
-
 
   const file =
     selectedChartFile ||
-    $("chartFile")
-      ?.files?.[0];
-
+    $("chartFile")?.files?.[0];
 
   if (!file) {
 
@@ -1791,22 +1373,15 @@ async function analyzeChart(
           : "ابتدا تصویر نمودار را انتخاب کنید.";
 
     return;
-
   }
 
+  analysisSubmitting = true;
 
-  analysisSubmitting =
-    true;
-
-
-  const button =
-    $("analyzeBtn");
+  const button = $("analyzeBtn");
 
   if (button) {
-    button.disabled =
-      true;
+    button.disabled = true;
   }
-
 
   $("chartMsg").textContent =
     currentLanguage() === "en"
@@ -1815,9 +1390,7 @@ async function analyzeChart(
         ? "يقوم الذكاء الاصطناعي بتحليل المخطط..."
         : "هوش مصنوعی در حال تحلیل نمودار شما است...";
 
-
-  const formData =
-    new FormData();
+  const formData = new FormData();
 
   formData.append(
     "chart",
@@ -1834,23 +1407,19 @@ async function analyzeChart(
     currentLanguage()
   );
 
-
   try {
 
-    const data =
-      await api(
-        "/api/analyze-chart",
-        {
-          method: "POST",
-          body: formData
-        }
-      );
-
+    const data = await api(
+      "/api/analyze-chart",
+      {
+        method: "POST",
+        body: formData
+      }
+    );
 
     renderAnalysis(
       data.analysis
     );
-
 
     $("chartMsg").textContent =
       currentLanguage() === "en"
@@ -1859,9 +1428,7 @@ async function analyzeChart(
           ? "اكتمل التحليل."
           : "تحلیل با موفقیت انجام شد.";
 
-
     await loadHistory();
-
 
   } catch (error) {
 
@@ -1870,16 +1437,12 @@ async function analyzeChart(
 
   } finally {
 
-    analysisSubmitting =
-      false;
+    analysisSubmitting = false;
 
     if (button) {
-      button.disabled =
-        false;
+      button.disabled = false;
     }
-
   }
-
 }
 
 
@@ -1887,9 +1450,7 @@ async function analyzeChart(
    RENDER ANALYSIS
 ========================================================= */
 
-function renderAnalysis(
-  result
-) {
+function renderAnalysis(result) {
 
   const container =
     $("analysisResult");
@@ -1898,13 +1459,11 @@ function renderAnalysis(
     return;
   }
 
-
   const direction =
     textValue(
       result?.direction,
       "WAIT"
     ).toUpperCase();
-
 
   const directionCard =
     $("directionCard");
@@ -1917,37 +1476,22 @@ function renderAnalysis(
       "wait"
     );
 
+    if (direction === "BUY") {
 
-    if (
-      direction === "BUY"
-    ) {
+      directionCard.classList.add("buy");
 
-      directionCard.classList.add(
-        "buy"
-      );
+    } else if (direction === "SELL") {
 
-    } else if (
-      direction === "SELL"
-    ) {
-
-      directionCard.classList.add(
-        "sell"
-      );
+      directionCard.classList.add("sell");
 
     } else {
 
-      directionCard.classList.add(
-        "wait"
-      );
-
+      directionCard.classList.add("wait");
     }
-
   }
-
 
   $("analysisDirection").textContent =
     direction;
-
 
   $("analysisSymbol").textContent =
     textValue(
@@ -1955,13 +1499,11 @@ function renderAnalysis(
       "XAUUSD"
     );
 
-
   $("analysisTimeframe").textContent =
     timeframeLabel(
       result?.timeframe ||
       selectedTimeframe
     );
-
 
   $("analysisEntry").textContent =
     textValue(
@@ -1969,13 +1511,11 @@ function renderAnalysis(
       "WAIT"
     );
 
-
   $("analysisSL").textContent =
     textValue(
       result?.sl,
       "WAIT"
     );
-
 
   $("analysisTP1").textContent =
     textValue(
@@ -1983,13 +1523,11 @@ function renderAnalysis(
       "WAIT"
     );
 
-
   $("analysisTP2").textContent =
     textValue(
       result?.tp2,
       "WAIT"
     );
-
 
   $("analysisTP3").textContent =
     textValue(
@@ -1997,13 +1535,11 @@ function renderAnalysis(
       "WAIT"
     );
 
-
   $("analysisTP4").textContent =
     textValue(
       result?.tp4,
       "WAIT"
     );
-
 
   $("analysisTP5").textContent =
     textValue(
@@ -2011,20 +1547,17 @@ function renderAnalysis(
       "WAIT"
     );
 
-
   $("analysisConfidence").textContent =
     textValue(
       result?.confidence,
       "Low"
     );
 
-
   $("analysisTextContent").textContent =
     textValue(
       result?.analysis,
       ""
     );
-
 
   $("analysisWarning").textContent =
     textValue(
@@ -2036,17 +1569,14 @@ function renderAnalysis(
           : "معامله‌گری دارای ریسک است. مدیریت ریسک مناسب را رعایت کنید."
     );
 
-
   container.classList.remove(
     "hidden"
   );
-
 
   container.scrollIntoView({
     behavior: "smooth",
     block: "start"
   });
-
 }
 
 
@@ -2063,22 +1593,15 @@ async function loadHistory() {
     return;
   }
 
-
   try {
 
     const data =
-      await api(
-        "/api/analyses"
-      );
-
+      await api("/api/analyses");
 
     const analyses =
-      Array.isArray(
-        data.analyses
-      )
+      Array.isArray(data.analyses)
         ? data.analyses
         : [];
-
 
     const container =
       $("analysisHistory");
@@ -2086,7 +1609,6 @@ async function loadHistory() {
     if (!container) {
       return;
     }
-
 
     if (!analyses.length) {
 
@@ -2100,92 +1622,87 @@ async function loadHistory() {
         }</div>`;
 
       return;
-
     }
 
-
     container.innerHTML =
-      analyses.map(
-        (item) => {
+      analyses.map((item) => {
 
-          return `
-            <div class="historyItem">
+        return `
+          <div class="historyItem">
 
-              <div class="historyTop">
+            <div class="historyTop">
 
-                <strong>
-                  ${escapeHtml(
-                    textValue(
-                      item.direction,
-                      "WAIT"
-                    )
-                  )}
-                </strong>
-
-                <small>
-                  ${escapeHtml(
-                    formatDate(
-                      item.created_at
-                    )
-                  )}
-                </small>
-
-              </div>
-
-              <div class="historyLevels">
-
-                <span>
-                  ${escapeHtml(
-                    item.symbol ||
-                    "XAUUSD"
-                  )}
-                </span>
-
-                <span>
-                  ${escapeHtml(
-                    timeframeLabel(
-                      item.timeframe
-                    )
-                  )}
-                </span>
-
-                <span>
-                  Entry:
-                  ${escapeHtml(
-                    textValue(
-                      item.entry,
-                      "WAIT"
-                    )
-                  )}
-                </span>
-
-                <span>
-                  SL:
-                  ${escapeHtml(
-                    textValue(
-                      item.sl,
-                      "WAIT"
-                    )
-                  )}
-                </span>
-
-              </div>
-
-              <p>
+              <strong>
                 ${escapeHtml(
                   textValue(
-                    item.analysis,
-                    ""
+                    item.direction,
+                    "WAIT"
                   )
                 )}
-              </p>
+              </strong>
+
+              <small>
+                ${escapeHtml(
+                  formatDate(
+                    item.created_at
+                  )
+                )}
+              </small>
 
             </div>
-          `;
 
-        }
-      ).join("");
+            <div class="historyLevels">
 
+              <span>
+                ${escapeHtml(
+                  item.symbol ||
+                  "XAUUSD"
+                )}
+              </span>
+
+              <span>
+                ${escapeHtml(
+                  timeframeLabel(
+                    item.timeframe
+                  )
+                )}
+              </span>
+
+              <span>
+                Entry:
+                ${escapeHtml(
+                  textValue(
+                    item.entry,
+                    "WAIT"
+                  )
+                )}
+              </span>
+
+              <span>
+                SL:
+                ${escapeHtml(
+                  textValue(
+                    item.sl,
+                    "WAIT"
+                  )
+                )}
+              </span>
+
+            </div>
+
+            <p>
+              ${escapeHtml(
+                textValue(
+                  item.analysis,
+                  ""
+                )
+              )}
+            </p>
+
+          </div>
+        `;
+
+      }).join("");
 
   } catch (error) {
 
@@ -2193,9 +1710,7 @@ async function loadHistory() {
       "HISTORY ERROR",
       error
     );
-
   }
-
 }
 
 
@@ -2212,22 +1727,15 @@ async function loadSignals() {
     return;
   }
 
-
   try {
 
     const data =
-      await api(
-        "/api/signals"
-      );
-
+      await api("/api/signals");
 
     const signals =
-      Array.isArray(
-        data.signals
-      )
+      Array.isArray(data.signals)
         ? data.signals
         : [];
-
 
     const container =
       $("signals");
@@ -2235,7 +1743,6 @@ async function loadSignals() {
     if (!container) {
       return;
     }
-
 
     if (!signals.length) {
 
@@ -2249,46 +1756,41 @@ async function loadSignals() {
         }</div>`;
 
       return;
-
     }
 
-
     container.innerHTML =
-      signals.map(
-        (signal) => {
+      signals.map((signal) => {
 
-          return `
-            <div class="signal">
+        return `
+          <div class="signal">
 
-              <div class="signalTitle">
-                ${escapeHtml(
-                  signal.title
-                )}
-              </div>
-
-              <small>
-                ${escapeHtml(
-                  formatDate(
-                    signal.created_at
-                  )
-                )}
-              </small>
-
-              <p>
-                ${escapeHtml(
-                  signal.body
-                ).replace(
-                  /\n/g,
-                  "<br>"
-                )}
-              </p>
-
+            <div class="signalTitle">
+              ${escapeHtml(
+                signal.title
+              )}
             </div>
-          `;
 
-        }
-      ).join("");
+            <small>
+              ${escapeHtml(
+                formatDate(
+                  signal.created_at
+                )
+              )}
+            </small>
 
+            <p>
+              ${escapeHtml(
+                signal.body
+              ).replace(
+                /\n/g,
+                "<br>"
+              )}
+            </p>
+
+          </div>
+        `;
+
+      }).join("");
 
   } catch (error) {
 
@@ -2296,9 +1798,7 @@ async function loadSignals() {
       "SIGNALS ERROR",
       error
     );
-
   }
-
 }
 
 
@@ -2308,9 +1808,7 @@ async function loadSignals() {
 
 async function sendSupport() {
 
-  if (
-    supportSubmitting
-  ) {
+  if (supportSubmitting) {
     return;
   }
 
@@ -2321,15 +1819,11 @@ async function sendSupport() {
     return;
   }
 
-
   const textarea =
     $("supportText");
 
   const message =
-    textarea
-      ?.value
-      .trim();
-
+    textarea?.value.trim();
 
   if (!message) {
 
@@ -2341,49 +1835,36 @@ async function sendSupport() {
           : "لطفاً پیام خود را بنویسید.";
 
     return;
-
   }
 
-
-  supportSubmitting =
-    true;
-
+  supportSubmitting = true;
 
   const button =
     $("supportBtn");
 
   if (button) {
-    button.disabled =
-      true;
+    button.disabled = true;
   }
-
 
   try {
 
-    const data =
-      await api(
-        "/api/support",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              message
-            })
-        }
-      );
-
+    const data = await api(
+      "/api/support",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          message
+        })
+      }
+    );
 
     if (textarea) {
-      textarea.value =
-        "";
+      textarea.value = "";
     }
-
 
     $("supportMsg").textContent =
       data.message ||
@@ -2395,7 +1876,6 @@ async function sendSupport() {
             : "پیام شما ارسال شد."
       );
 
-
   } catch (error) {
 
     $("supportMsg").textContent =
@@ -2403,16 +1883,12 @@ async function sendSupport() {
 
   } finally {
 
-    supportSubmitting =
-      false;
+    supportSubmitting = false;
 
     if (button) {
-      button.disabled =
-        false;
+      button.disabled = false;
     }
-
   }
-
 }
 
 
@@ -2425,10 +1901,7 @@ async function restoreSession() {
   try {
 
     const data =
-      await api(
-        "/api/me"
-      );
-
+      await api("/api/me");
 
     if (
       data.loggedIn &&
@@ -2439,16 +1912,12 @@ async function restoreSession() {
         data.user;
 
       await showDashboard();
-
       await refreshAccess();
 
       return;
-
     }
 
-
-    currentUser =
-      null;
+    currentUser = null;
 
     const dashboard =
       $("dashboard");
@@ -2457,17 +1926,12 @@ async function restoreSession() {
       $("auth");
 
     if (dashboard) {
-      dashboard.classList.add(
-        "hidden"
-      );
+      dashboard.classList.add("hidden");
     }
 
     if (auth) {
-      auth.classList.remove(
-        "hidden"
-      );
+      auth.classList.remove("hidden");
     }
-
 
   } catch (error) {
 
@@ -2475,9 +1939,7 @@ async function restoreSession() {
       "SESSION ERROR",
       error
     );
-
   }
-
 }
 
 
@@ -2502,30 +1964,25 @@ function bindEvents() {
 
       }
     );
-
   }
 
 
   document
-    .querySelectorAll(
-      ".tab[data-tab]"
-    )
-    .forEach(
-      (button) => {
+    .querySelectorAll(".tab[data-tab]")
+    .forEach((button) => {
 
-        button.addEventListener(
-          "click",
-          () => {
+      button.addEventListener(
+        "click",
+        () => {
 
-            showAuthTab(
-              button.dataset.tab
-            );
+          showAuthTab(
+            button.dataset.tab
+          );
 
-          }
-        );
+        }
+      );
 
-      }
-    );
+    });
 
 
   const loginForm =
@@ -2537,7 +1994,6 @@ function bindEvents() {
       "submit",
       login
     );
-
   }
 
 
@@ -2550,7 +2006,6 @@ function bindEvents() {
       "submit",
       register
     );
-
   }
 
 
@@ -2563,52 +2018,43 @@ function bindEvents() {
       "click",
       logout
     );
-
   }
 
 
   document
-    .querySelectorAll(
-      ".pay[data-method]"
-    )
-    .forEach(
-      (button) => {
+    .querySelectorAll(".pay[data-method]")
+    .forEach((button) => {
 
-        button.addEventListener(
-          "click",
-          () => {
+      button.addEventListener(
+        "click",
+        () => {
 
-            selectPaymentMethod(
-              button.dataset.method
-            );
+          selectPaymentMethod(
+            button.dataset.method
+          );
 
-          }
-        );
+        }
+      );
 
-      }
-    );
+    });
 
 
   document
-    .querySelectorAll(
-      ".timeframeOption"
-    )
-    .forEach(
-      (button) => {
+    .querySelectorAll(".timeframeOption")
+    .forEach((button) => {
 
-        button.addEventListener(
-          "click",
-          () => {
+      button.addEventListener(
+        "click",
+        () => {
 
-            selectTimeframe(
-              button.dataset.timeframe
-            );
+          selectTimeframe(
+            button.dataset.timeframe
+          );
 
-          }
-        );
+        }
+      );
 
-      }
-    );
+    });
 
 
   const paymentForm =
@@ -2620,7 +2066,6 @@ function bindEvents() {
       "submit",
       submitPayment
     );
-
   }
 
 
@@ -2649,14 +2094,11 @@ function bindEvents() {
                 ? "الإيصال كبير جداً. الحد الأقصى 5 ميجابايت."
                 : "رسید بسیار بزرگ است. حداکثر حجم ۵ مگابایت است.";
 
-          receipt.value =
-            "";
-
+          receipt.value = "";
         }
 
       }
     );
-
   }
 
 
@@ -2669,7 +2111,6 @@ function bindEvents() {
       "change",
       handleChartFile
     );
-
   }
 
 
@@ -2682,7 +2123,6 @@ function bindEvents() {
       "submit",
       analyzeChart
     );
-
   }
 
 
@@ -2695,9 +2135,7 @@ function bindEvents() {
       "click",
       sendSupport
     );
-
   }
-
 }
 
 
