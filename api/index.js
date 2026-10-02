@@ -8,13 +8,9 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
-/*
-========================================================
-ENVIRONMENT
-========================================================
-Neon/Vercel integrations may expose the connection string
-under different variable names. We support the common ones.
-*/
+/* =====================================================
+   ENVIRONMENT
+===================================================== */
 
 const DATABASE_URL =
   process.env.DATABASE_URL ||
@@ -45,11 +41,9 @@ const sql = DATABASE_URL
 
 let dbReadyPromise = null;
 
-/*
-========================================================
-DATABASE INITIALIZATION
-========================================================
-*/
+/* =====================================================
+   DATABASE
+===================================================== */
 
 async function ensureDatabase() {
   if (!sql) {
@@ -60,16 +54,10 @@ async function ensureDatabase() {
 
   if (!dbReadyPromise) {
     dbReadyPromise = (async () => {
-      /*
-      First verify that Neon itself is reachable.
-      */
       await sql`
         SELECT 1 AS ok
       `;
 
-      /*
-      USERS
-      */
       await sql`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -83,9 +71,6 @@ async function ensureDatabase() {
         )
       `;
 
-      /*
-      PAYMENTS
-      */
       await sql`
         CREATE TABLE IF NOT EXISTS payments (
           id SERIAL PRIMARY KEY,
@@ -101,9 +86,6 @@ async function ensureDatabase() {
         )
       `;
 
-      /*
-      SIGNALS
-      */
       await sql`
         CREATE TABLE IF NOT EXISTS signals (
           id SERIAL PRIMARY KEY,
@@ -113,9 +95,6 @@ async function ensureDatabase() {
         )
       `;
 
-      /*
-      SUPPORT
-      */
       await sql`
         CREATE TABLE IF NOT EXISTS support (
           id SERIAL PRIMARY KEY,
@@ -125,9 +104,6 @@ async function ensureDatabase() {
         )
       `;
 
-      /*
-      ANALYSES
-      */
       await sql`
         CREATE TABLE IF NOT EXISTS analyses (
           id SERIAL PRIMARY KEY,
@@ -150,23 +126,23 @@ async function ensureDatabase() {
       `;
 
       /*
-      ====================================================
-      ANALYSES ID MIGRATION
-      ====================================================
-
-      Older database versions may have:
-        id NOT NULL
-
-      but no automatic sequence/default.
-
-      This repairs that situation without deleting
-      existing records.
-      */
+       * IMPORTANT:
+       * Do NOT run COALESCE(MAX(id), 0) on every table.
+       *
+       * Some existing databases may have TEXT ids.
+       * That was the source of:
+       *
+       * "COALESCE types text and integer cannot be matched"
+       *
+       * We only repair analyses.id and only when it is
+       * actually a numeric column.
+       */
 
       const idInfo = await sql`
         SELECT
           column_default,
-          is_identity
+          is_identity,
+          data_type
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'analyses'
@@ -175,14 +151,27 @@ async function ensureDatabase() {
       `;
 
       if (idInfo.length) {
-        const currentDefault =
-          idInfo[0].column_default;
+        const dataType =
+          String(
+            idInfo[0].data_type || ""
+          ).toLowerCase();
+
+        const isNumeric =
+          dataType === "integer" ||
+          dataType === "bigint" ||
+          dataType === "smallint";
+
+        const hasDefault =
+          Boolean(
+            idInfo[0].column_default
+          );
 
         const isIdentity =
           idInfo[0].is_identity === "YES";
 
         if (
-          !currentDefault &&
+          isNumeric &&
+          !hasDefault &&
           !isIdentity
         ) {
           await sql`
@@ -190,15 +179,24 @@ async function ensureDatabase() {
           `;
 
           const maxRows = await sql`
-            SELECT COALESCE(MAX(id), 0) AS max_id
+            SELECT
+              COALESCE(
+                MAX(id),
+                0::bigint
+              ) AS max_id
             FROM analyses
           `;
 
           const maxId =
-            Number(maxRows[0]?.max_id || 0);
+            Number(
+              maxRows[0]?.max_id || 0
+            );
 
           const nextId =
-            Math.max(maxId + 1, 1);
+            Math.max(
+              maxId + 1,
+              1
+            );
 
           await sql`
             SELECT setval(
@@ -211,28 +209,13 @@ async function ensureDatabase() {
           await sql`
             ALTER TABLE analyses
             ALTER COLUMN id
-            SET DEFAULT nextval('analyses_id_seq')
+            SET DEFAULT nextval(
+              'analyses_id_seq'
+            )
           `;
         }
       }
-
-      /*
-      ====================================================
-      OTHER LEGACY TABLE ID REPAIRS
-      ====================================================
-      */
-
-      await repairSerialId("users");
-      await repairSerialId("payments");
-      await repairSerialId("signals");
-      await repairSerialId("support");
-      await repairSerialId("analyses");
     })().catch((error) => {
-      /*
-      Do not permanently cache a rejected promise.
-      If Neon has a temporary problem, the next request
-      gets another chance to connect.
-      */
       dbReadyPromise = null;
       throw error;
     });
@@ -241,234 +224,130 @@ async function ensureDatabase() {
   return dbReadyPromise;
 }
 
-/*
-========================================================
-SERIAL ID REPAIR
-========================================================
-*/
+/* =====================================================
+   BASIC ROUTES / HEALTH
+===================================================== */
 
-async function repairSerialId(tableName) {
-  const allowedTables = [
-    "users",
-    "payments",
-    "signals",
-    "support",
-    "analyses"
-  ];
+app.get("/", (req, res) => {
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online"
+  });
+});
 
-  if (!allowedTables.includes(tableName)) {
-    return;
+app.get("/api", async (req, res) => {
+  if (!sql) {
+    return res.status(500).json({
+      ok: false,
+      service: "GoldAI API",
+      status: "online",
+      database: "missing",
+      ai: OPENAI_API_KEY
+        ? "configured"
+        : "missing",
+      error:
+        "No database connection string is available."
+    });
   }
 
   try {
-    const info = await sql`
-      SELECT
-        column_default,
-        is_identity
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = ${tableName}
-        AND column_name = 'id'
-      LIMIT 1
+    await sql`
+      SELECT 1 AS ok
     `;
 
-    if (!info.length) {
-      return;
-    }
-
-    const hasDefault =
-      Boolean(info[0].column_default);
-
-    const isIdentity =
-      info[0].is_identity === "YES";
-
-    if (
-      hasDefault ||
-      isIdentity
-    ) {
-      return;
-    }
-
-    const sequenceName =
-      `${tableName}_id_seq`;
-
-    await sql.unsafe(
-      `CREATE SEQUENCE IF NOT EXISTS "${sequenceName}"`
-    );
-
-    const maxRows = await sql.unsafe(
-      `SELECT COALESCE(MAX(id), 0) AS max_id FROM "${tableName}"`
-    );
-
-    const maxId =
-      Number(maxRows[0]?.max_id || 0);
-
-    const nextId =
-      Math.max(maxId + 1, 1);
-
-    await sql.unsafe(
-      `SELECT setval('${sequenceName}', ${nextId}, false)`
-    );
-
-    await sql.unsafe(
-      `ALTER TABLE "${tableName}" ALTER COLUMN id SET DEFAULT nextval('${sequenceName}')`
-    );
-  } catch (error) {
-    /*
-    analyses has already been explicitly repaired above.
-    If another legacy table cannot be repaired, do not
-    hide the original database connection problem.
-    */
-    console.error(
-      `SERIAL ID REPAIR ERROR (${tableName}):`,
-      error
-    );
-  }
-}
-
-/*
-========================================================
-HEALTH CHECK
-========================================================
-*/
-
-app.get(
-  "/",
-  (req, res) => {
     res.json({
       ok: true,
       service: "GoldAI API",
-      status: "online"
+      status: "online",
+      database: "connected",
+      ai: OPENAI_API_KEY
+        ? "configured"
+        : "missing"
+    });
+  } catch (error) {
+    console.error(
+      "API DATABASE HEALTH ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      ok: false,
+      service: "GoldAI API",
+      status: "online",
+      database: "error",
+      ai: OPENAI_API_KEY
+        ? "configured"
+        : "missing",
+      error:
+        error?.message ||
+        "Database connection failed."
     });
   }
-);
+});
 
-app.get(
-  "/api",
-  async (req, res) => {
-    if (!sql) {
-      return res.status(500).json({
-        ok: false,
-        service: "GoldAI API",
-        status: "online",
-        database: "missing",
-        ai: OPENAI_API_KEY
-          ? "configured"
-          : "missing",
-        error:
-          "No database connection string is available."
-      });
-    }
-
-    try {
-      await sql`
-        SELECT 1 AS ok
-      `;
-
-      return res.json({
-        ok: true,
-        service: "GoldAI API",
-        status: "online",
-        database: "connected",
-        ai: OPENAI_API_KEY
-          ? "configured"
-          : "missing"
-      });
-    } catch (error) {
-      console.error(
-        "API DATABASE HEALTH ERROR:",
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        service: "GoldAI API",
-        status: "online",
-        database: "error",
-        ai: OPENAI_API_KEY
-          ? "configured"
-          : "missing",
-        error:
-          error?.message ||
-          "Database connection failed."
-      });
-    }
+app.get("/api/health", async (req, res) => {
+  if (!sql) {
+    return res.status(500).json({
+      ok: false,
+      service: "GoldAI API",
+      status: "online",
+      database: "missing",
+      ai: OPENAI_API_KEY
+        ? "configured"
+        : "missing",
+      error:
+        "No database connection string is available to this deployment."
+    });
   }
-);
 
-app.get(
-  "/api/health",
-  async (req, res) => {
-    if (!sql) {
-      return res.status(500).json({
-        ok: false,
-        service: "GoldAI API",
-        status: "online",
-        database: "missing",
-        ai: OPENAI_API_KEY
-          ? "configured"
-          : "missing",
-        error:
-          "No database connection string is available to this deployment."
-      });
-    }
+  try {
+    await sql`
+      SELECT 1 AS ok
+    `;
 
-    try {
-      await sql`
-        SELECT 1 AS ok
-      `;
-
-      return res.json({
-        ok: true,
-        service: "GoldAI API",
-        status: "online",
-        database: "connected",
-        ai: OPENAI_API_KEY
-          ? "configured"
-          : "missing"
-      });
-    } catch (error) {
-      console.error(
-        "DATABASE HEALTH ERROR:",
-        error
-      );
-
-      return res.status(500).json({
-        ok: false,
-        service: "GoldAI API",
-        status: "online",
-        database: "error",
-        ai: OPENAI_API_KEY
-          ? "configured"
-          : "missing",
-        error:
-          error?.message ||
-          "Neon database connection failed."
-      });
-    }
-  }
-);
-
-app.get(
-  "/health",
-  (req, res) => {
     res.json({
       ok: true,
-      status: "online"
+      service: "GoldAI API",
+      status: "online",
+      database: "connected",
+      ai: OPENAI_API_KEY
+        ? "configured"
+        : "missing"
+    });
+  } catch (error) {
+    console.error(
+      "DATABASE HEALTH ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      ok: false,
+      service: "GoldAI API",
+      status: "online",
+      database: "error",
+      ai: OPENAI_API_KEY
+        ? "configured"
+        : "missing",
+      error:
+        error?.message ||
+        "Neon database connection failed."
     });
   }
-);
+});
 
-/*
-========================================================
-DATABASE MIDDLEWARE
-========================================================
-*/
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    status: "online"
+  });
+});
+
+/* =====================================================
+   DATABASE MIDDLEWARE
+===================================================== */
 
 app.use(async (req, res, next) => {
-  /*
-  Health routes are already handled above.
-  */
   try {
     await ensureDatabase();
     next();
@@ -486,11 +365,9 @@ app.use(async (req, res, next) => {
   }
 });
 
-/*
-========================================================
-PASSWORD FUNCTIONS
-========================================================
-*/
+/* =====================================================
+   PASSWORD
+===================================================== */
 
 function hashPassword(password) {
   const salt =
@@ -544,11 +421,9 @@ function checkPassword(
   }
 }
 
-/*
-========================================================
-SESSION
-========================================================
-*/
+/* =====================================================
+   SESSION
+===================================================== */
 
 function createToken(
   userId,
@@ -582,7 +457,11 @@ function createToken(
       .update(encoded)
       .digest("base64url");
 
-  return `${encoded}.${signature}`;
+  return (
+    encoded +
+    "." +
+    signature
+  );
 }
 
 function getCookieToken(req) {
@@ -594,19 +473,24 @@ function getCookieToken(req) {
   header
     .split(";")
     .forEach((part) => {
-      const i =
+      const index =
         part.indexOf("=");
 
-      if (i === -1) {
+      if (index === -1) {
         return;
       }
 
-      cookies[
-        part.slice(0, i).trim()
-      ] =
+      const key =
         part
-          .slice(i + 1)
+          .slice(0, index)
           .trim();
+
+      const value =
+        part
+          .slice(index + 1)
+          .trim();
+
+      cookies[key] = value;
     });
 
   if (
@@ -720,9 +604,10 @@ function setSessionCookie(
 
   res.setHeader(
     "Set-Cookie",
-    `goldai_session=${encodeURIComponent(
-      token
-    )}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`
+    "goldai_session=" +
+      encodeURIComponent(token) +
+      "; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800" +
+      secure
   );
 }
 
@@ -741,7 +626,8 @@ function clearSessionCookie(
 
   res.setHeader(
     "Set-Cookie",
-    `goldai_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`
+    "goldai_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0" +
+      secure
   );
 }
 
@@ -765,11 +651,9 @@ function formatUser(row) {
   };
 }
 
-/*
-========================================================
-AUTH MIDDLEWARE
-========================================================
-*/
+/* =====================================================
+   AUTH
+===================================================== */
 
 async function requireUser(
   req,
@@ -857,7 +741,9 @@ async function requireApprovedUser(
 
     req.user = rows[0];
 
-    if (!req.user.approved) {
+    if (
+      !req.user.approved
+    ) {
       return res.status(403).json({
         error:
           "Payment approval is required before using this feature."
@@ -899,11 +785,9 @@ function requireAdmin(
   next();
 }
 
-/*
-========================================================
-UPLOAD
-========================================================
-*/
+/* =====================================================
+   UPLOAD
+===================================================== */
 
 const upload =
   multer({
@@ -944,37 +828,35 @@ const upload =
       }
   });
 
-/*
-========================================================
-REGISTER
-========================================================
-*/
+/* =====================================================
+   REGISTER
+===================================================== */
 
 app.post(
   "/api/register",
   async (req, res) => {
     try {
-      const cleanName =
+      const name =
         String(
           req.body?.name || ""
         ).trim();
 
-      const cleanEmail =
+      const email =
         String(
           req.body?.email || ""
         )
           .trim()
           .toLowerCase();
 
-      const cleanPassword =
+      const password =
         String(
           req.body?.password || ""
         );
 
       if (
-        !cleanName ||
-        !cleanEmail ||
-        !cleanPassword
+        !name ||
+        !email ||
+        !password
       ) {
         return res.status(400).json({
           error:
@@ -983,7 +865,7 @@ app.post(
       }
 
       if (
-        cleanPassword.length < 6
+        password.length < 6
       ) {
         return res.status(400).json({
           error:
@@ -995,7 +877,7 @@ app.post(
         await sql`
           SELECT id
           FROM users
-          WHERE email = ${cleanEmail}
+          WHERE email = ${email}
           LIMIT 1
         `;
 
@@ -1006,10 +888,8 @@ app.post(
         });
       }
 
-      const p =
-        hashPassword(
-          cleanPassword
-        );
+      const passwordData =
+        hashPassword(password);
 
       const rows =
         await sql`
@@ -1022,15 +902,22 @@ app.post(
             email_verified
           )
           VALUES (
-            ${cleanName},
-            ${cleanEmail},
-            ${p.salt},
-            ${p.hash},
+            ${name},
+            ${email},
+            ${passwordData.salt},
+            ${passwordData.hash},
             FALSE,
             FALSE
           )
           RETURNING *
         `;
+
+      if (!rows.length) {
+        return res.status(500).json({
+          error:
+            "Account could not be created."
+        });
+      }
 
       setSessionCookie(
         req,
@@ -1057,17 +944,16 @@ app.post(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Registration failed."
       });
     }
   }
 );
 
-/*
-========================================================
-LOGIN
-========================================================
-*/
+/* =====================================================
+   LOGIN
+===================================================== */
 
 app.post(
   "/api/login",
@@ -1103,12 +989,18 @@ app.post(
           LIMIT 1
         `;
 
+      if (!rows.length) {
+        return res.status(401).json({
+          error:
+            "Invalid email or password."
+        });
+      }
+
       const user =
         rows[0];
 
-      if (
-        !user ||
-        !checkPassword(
+      const valid =
+        checkPassword(
           password,
           {
             salt:
@@ -1116,8 +1008,9 @@ app.post(
             hash:
               user.password_hash
           }
-        )
-      ) {
+        );
+
+      if (!valid) {
         return res.status(401).json({
           error:
             "Invalid email or password."
@@ -1137,9 +1030,7 @@ app.post(
         ok: true,
         loggedIn: true,
         user:
-          formatUser(
-            user
-          )
+          formatUser(user)
       });
     } catch (error) {
       console.error(
@@ -1149,17 +1040,16 @@ app.post(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Login failed."
       });
     }
   }
 );
 
-/*
-========================================================
-LOGOUT
-========================================================
-*/
+/* =====================================================
+   LOGOUT
+===================================================== */
 
 app.post(
   "/api/logout",
@@ -1176,85 +1066,88 @@ app.post(
   }
 );
 
-/*
-========================================================
-CURRENT USER
-========================================================
-*/
+/* =====================================================
+   ME
+===================================================== */
 
 app.get(
   "/api/me",
+  requireUser,
+  (req, res) => {
+    res.json({
+      ok: true,
+      loggedIn: true,
+      user:
+        formatUser(
+          req.user
+        )
+    });
+  }
+);
+
+/* =====================================================
+   ACCESS
+===================================================== */
+
+app.get(
+  "/api/access",
+  requireUser,
   async (req, res) => {
     try {
-      const session =
-        getSession(req);
-
-      if (!session) {
-        return res.json({
-          loggedIn: false
-        });
-      }
-
-      if (
-        session.role === "admin"
-      ) {
-        return res.json({
-          loggedIn: true,
-          role: "admin"
-        });
-      }
-
       const rows =
         await sql`
-          SELECT *
+          SELECT
+            approved
           FROM users
-          WHERE id = ${session.userId}
+          WHERE id = ${req.user.id}
           LIMIT 1
         `;
 
-      if (!rows.length) {
-        clearSessionCookie(
-          req,
-          res
-        );
+      const approved =
+        rows.length
+          ? Boolean(
+              rows[0].approved
+            )
+          : false;
 
-        return res.json({
-          loggedIn: false
-        });
-      }
-
-      res.setHeader(
-        "Cache-Control",
-        "no-store"
-      );
+      const payments =
+        await sql`
+          SELECT
+            id,
+            method,
+            amount,
+            reference,
+            status,
+            created_at,
+            reviewed_at
+          FROM payments
+          WHERE user_id = ${req.user.id}
+          ORDER BY created_at DESC
+          LIMIT 20
+        `;
 
       res.json({
-        loggedIn: true,
-        role: "user",
-        user:
-          formatUser(
-            rows[0]
-          )
+        ok: true,
+        approved,
+        payments
       });
     } catch (error) {
       console.error(
-        "ME ERROR:",
+        "ACCESS ERROR:",
         error
       );
 
       res.status(500).json({
         error:
-          "Could not load session."
+          "Could not check access."
       });
     }
   }
 );
 
-/*
-========================================================
-PAYMENT
-========================================================
-*/
+/* =====================================================
+   PAYMENT
+===================================================== */
 
 app.post(
   "/api/payment",
@@ -1264,44 +1157,25 @@ app.post(
   ),
   async (req, res) => {
     try {
-      if (req.user.approved) {
-        return res.status(409).json({
-          error:
-            "Your account is already approved."
-        });
-      }
-
       const method =
         String(
           req.body?.method || ""
-        )
-          .trim()
-          .toLowerCase();
+        ).trim();
 
       const reference =
         String(
           req.body?.reference || ""
         ).trim();
 
-      if (!reference) {
-        return res.status(400).json({
-          error:
-            "Payment reference is required."
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({
-          error:
-            "Receipt image is required."
-        });
-      }
+      const allowedMethods = [
+        "HesabPay",
+        "Binance Pay"
+      ];
 
       if (
-        method !==
-          "hesabpay" &&
-        method !==
-          "binance"
+        !allowedMethods.includes(
+          method
+        )
       ) {
         return res.status(400).json({
           error:
@@ -1309,32 +1183,32 @@ app.post(
         });
       }
 
-      const pending =
-        await sql`
-          SELECT id
-          FROM payments
-          WHERE user_id = ${req.user.id}
-            AND status = 'pending'
-          ORDER BY created_at DESC
-          LIMIT 1
-        `;
+      let amount = null;
 
-      if (pending.length) {
-        return res.status(409).json({
-          error:
-            "You already have a payment waiting for approval."
-        });
+      if (
+        method === "HesabPay"
+      ) {
+        amount = 240;
       }
 
-      const amount =
-        method === "binance"
-          ? "4"
-          : "240";
+      if (
+        method === "Binance Pay"
+      ) {
+        amount = 4;
+      }
 
-      const receiptData =
-        req.file.buffer.toString(
-          "base64"
-        );
+      let receiptData = null;
+      let receiptMime = null;
+
+      if (req.file) {
+        receiptData =
+          req.file.buffer.toString(
+            "base64"
+          );
+
+        receiptMime =
+          req.file.mimetype;
+      }
 
       const rows =
         await sql`
@@ -1353,12 +1227,11 @@ app.post(
             ${amount},
             ${reference},
             ${receiptData},
-            ${req.file.mimetype},
+            ${receiptMime},
             'pending'
           )
           RETURNING
             id,
-            user_id,
             method,
             amount,
             reference,
@@ -1386,112 +1259,13 @@ app.post(
   }
 );
 
-/*
-========================================================
-ACCESS
-========================================================
-*/
-
-app.get(
-  "/api/access",
-  requireUser,
-  async (req, res) => {
-    try {
-      const latest =
-        await sql`
-          SELECT
-            id,
-            method,
-            amount,
-            reference,
-            status,
-            created_at,
-            reviewed_at
-          FROM payments
-          WHERE user_id = ${req.user.id}
-          ORDER BY created_at DESC
-          LIMIT 1
-        `;
-
-      res.setHeader(
-        "Cache-Control",
-        "no-store"
-      );
-
-      res.json({
-        ok: true,
-        approved:
-          Boolean(
-            req.user.approved
-          ),
-        status:
-          req.user.approved
-            ? "approved"
-            : latest[0]?.status ||
-              "not_submitted",
-        payment:
-          latest[0] || null
-      });
-    } catch (error) {
-      console.error(
-        "ACCESS ERROR:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Could not load access status."
-      });
-    }
-  }
-);
-
-/*
-========================================================
-SIGNALS
-========================================================
-*/
-
-app.get(
-  "/api/signals",
-  requireApprovedUser,
-  async (req, res) => {
-    try {
-      const rows =
-        await sql`
-          SELECT *
-          FROM signals
-          ORDER BY created_at DESC
-          LIMIT 100
-        `;
-
-      res.json({
-        ok: true,
-        signals: rows
-      });
-    } catch (error) {
-      console.error(
-        "SIGNALS ERROR:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Could not load signals."
-      });
-    }
-  }
-);
-
-/*
-========================================================
-SUPPORT
-========================================================
-*/
+/* =====================================================
+   SUPPORT
+===================================================== */
 
 app.post(
   "/api/support",
-  requireApprovedUser,
+  requireUser,
   async (req, res) => {
     try {
       const message =
@@ -1503,15 +1277,6 @@ app.post(
         return res.status(400).json({
           error:
             "Message is required."
-        });
-      }
-
-      if (
-        message.length > 5000
-      ) {
-        return res.status(400).json({
-          error:
-            "Message is too long."
         });
       }
 
@@ -1541,17 +1306,52 @@ app.post(
 
       res.status(500).json({
         error:
-          "Could not send support message."
+          error?.message ||
+          "Support message failed."
       });
     }
   }
 );
 
-/*
-========================================================
-TIMEFRAME
-========================================================
-*/
+/* =====================================================
+   SIGNALS
+===================================================== */
+
+app.get(
+  "/api/signals",
+  requireApprovedUser,
+  async (req, res) => {
+    try {
+      const rows =
+        await sql`
+          SELECT *
+          FROM signals
+          ORDER BY created_at DESC
+          LIMIT 100
+        `;
+
+      res.json({
+        ok: true,
+        signals:
+          rows
+      });
+    } catch (error) {
+      console.error(
+        "SIGNALS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          "Could not load signals."
+      });
+    }
+  }
+);
+
+/* =====================================================
+   TIMEFRAME
+===================================================== */
 
 function normalizeTimeframe(
   value
@@ -1564,46 +1364,83 @@ function normalizeTimeframe(
       .toLowerCase();
 
   if (
-    [
-      "1m",
-      "1min",
-      "1 minute",
-      "1minute"
-    ].includes(v)
+    v === "1m" ||
+    v === "1"
   ) {
-    return "1M";
+    return "1m";
   }
 
   if (
-    [
-      "5m",
-      "5min",
-      "5 minutes",
-      "5minute"
-    ].includes(v)
+    v === "5m" ||
+    v === "5"
   ) {
-    return "5M";
+    return "5m";
   }
 
   if (
-    [
-      "15m",
-      "15min",
-      "15 minutes",
-      "15minute"
-    ].includes(v)
+    v === "15m" ||
+    v === "15"
   ) {
-    return "15M";
+    return "15m";
   }
 
   return null;
 }
 
-/*
-========================================================
-AI JSON HELPERS
-========================================================
-*/
+/* =====================================================
+   AI RESPONSE HELPERS
+===================================================== */
+
+function extractResponseText(
+  data
+) {
+  if (!data) {
+    return "";
+  }
+
+  if (
+    typeof data.output_text ===
+    "string"
+  ) {
+    return data.output_text.trim();
+  }
+
+  if (
+    Array.isArray(
+      data.output
+    )
+  ) {
+    let text = "";
+
+    for (
+      const item of data.output
+    ) {
+      if (
+        Array.isArray(
+          item.content
+        )
+      ) {
+        for (
+          const content of item.content
+        ) {
+          if (
+            typeof content.text ===
+            "string"
+          ) {
+            text +=
+              content.text;
+          }
+        }
+      }
+    }
+
+    if (text.trim()) {
+      return text.trim();
+    }
+  }
+
+  return "";
+}
 
 function findJsonObject(
   text
@@ -1612,14 +1449,22 @@ function findJsonObject(
     return null;
   }
 
-  const cleaned =
+  let cleaned =
     String(text)
+      .trim();
+
+  cleaned =
+    cleaned
       .replace(
-        /```json/gi,
+        /^```json/i,
         ""
       )
       .replace(
-        /```/g,
+        /^```/i,
+        ""
+      )
+      .replace(
+        /```$/i,
         ""
       )
       .trim();
@@ -1638,6 +1483,7 @@ function findJsonObject(
 
   if (
     first === -1 ||
+    last === -1 ||
     last <= first
   ) {
     return null;
@@ -1655,64 +1501,30 @@ function findJsonObject(
   }
 }
 
-function extractResponseText(
-  data
-) {
-  if (!data) {
-    return "";
-  }
-
-  if (
-    typeof data.output_text ===
-    "string"
-  ) {
-    return data.output_text.trim();
-  }
-
-  const parts = [];
-
-  for (
-    const item of
-    data.output || []
-  ) {
-    for (
-      const content of
-      item.content || []
-    ) {
-      if (
-        typeof content.text ===
-        "string"
-      ) {
-        parts.push(
-          content.text
-        );
-      }
-    }
-  }
-
-  return parts
-    .join("\n")
-    .trim();
-}
-
 function normalizeAnalysis(
   parsed,
   timeframe
 ) {
+  const rawDirection =
+    String(
+      parsed?.direction || ""
+    ).toUpperCase();
+
   const direction =
     [
       "BUY",
       "SELL",
       "WAIT"
     ].includes(
-      String(
-        parsed.direction || ""
-      ).toUpperCase()
+      rawDirection
     )
-      ? String(
-          parsed.direction
-        ).toUpperCase()
+      ? rawDirection
       : "WAIT";
+
+  const rawConfidence =
+    String(
+      parsed?.confidence || ""
+    );
 
   const confidence =
     [
@@ -1720,13 +1532,9 @@ function normalizeAnalysis(
       "Medium",
       "High"
     ].includes(
-      String(
-        parsed.confidence || ""
-      )
+      rawConfidence
     )
-      ? String(
-          parsed.confidence
-        )
+      ? rawConfidence
       : "Low";
 
   return {
@@ -1738,45 +1546,43 @@ function normalizeAnalysis(
     direction,
 
     entry:
-      parsed.entry ?? "",
+      parsed?.entry ?? "",
 
     tp1:
-      parsed.tp1 ?? "",
+      parsed?.tp1 ?? "",
 
     tp2:
-      parsed.tp2 ?? "",
+      parsed?.tp2 ?? "",
 
     tp3:
-      parsed.tp3 ?? "",
+      parsed?.tp3 ?? "",
 
     tp4:
-      parsed.tp4 ?? "",
+      parsed?.tp4 ?? "",
 
     tp5:
-      parsed.tp5 ?? "",
+      parsed?.tp5 ?? "",
 
     sl:
-      parsed.sl ?? "",
+      parsed?.sl ?? "",
 
     confidence,
 
     analysis:
       String(
-        parsed.analysis || ""
+        parsed?.analysis || ""
       ),
 
     warning:
       String(
-        parsed.warning || ""
+        parsed?.warning || ""
       )
   };
 }
 
-/*
-========================================================
-OPENAI REQUEST
-========================================================
-*/
+/* =====================================================
+   OPENAI
+===================================================== */
 
 async function requestAIAnalysis(
   imageUrl,
@@ -1852,11 +1658,9 @@ async function requestAIAnalysis(
   };
 }
 
-/*
-========================================================
-ANALYZE CHART
-========================================================
-*/
+/* =====================================================
+   ANALYZE CHART
+===================================================== */
 
 app.post(
   "/api/analyze-chart",
@@ -1913,7 +1717,9 @@ app.post(
             : "English";
 
       const imageUrl =
-        `data:${req.file.mimetype};base64,` +
+        "data:" +
+        req.file.mimetype +
+        ";base64," +
         req.file.buffer.toString(
           "base64"
         );
@@ -1963,7 +1769,9 @@ Return ONLY one valid JSON object with exactly these fields:
 direction must be BUY, SELL or WAIT.
 confidence must be Low, Medium or High.
 The timeframe must remain exactly "${timeframe}".
+
 Write analysis and warning in ${languageName}.
+
 Return JSON only.
 `;
 
@@ -2079,10 +1887,10 @@ Write analysis and warning in ${languageName}.
         );
 
       /*
-      IMPORTANT:
-      id is intentionally NOT supplied.
-      PostgreSQL generates it automatically.
-      */
+       * Do not manually insert analyses.id.
+       * PostgreSQL will generate it when the existing
+       * analyses.id column is numeric and has a default.
+       */
 
       const saved =
         await sql`
@@ -2157,11 +1965,9 @@ Write analysis and warning in ${languageName}.
   }
 );
 
-/*
-========================================================
-ANALYSIS HISTORY
-========================================================
-*/
+/* =====================================================
+   ANALYSIS HISTORY
+===================================================== */
 
 app.get(
   "/api/analyses",
@@ -2196,11 +2002,9 @@ app.get(
   }
 );
 
-/*
-========================================================
-ADMIN LOGIN
-========================================================
-*/
+/* =====================================================
+   ADMIN LOGIN
+===================================================== */
 
 app.post(
   "/api/admin/login",
@@ -2238,11 +2042,9 @@ app.post(
   }
 );
 
-/*
-========================================================
-ADMIN LOGOUT
-========================================================
-*/
+/* =====================================================
+   ADMIN LOGOUT
+===================================================== */
 
 app.post(
   "/api/admin/logout",
@@ -2259,11 +2061,9 @@ app.post(
   }
 );
 
-/*
-========================================================
-ADMIN ME
-========================================================
-*/
+/* =====================================================
+   ADMIN ME
+===================================================== */
 
 app.get(
   "/api/admin/me",
@@ -2277,11 +2077,9 @@ app.get(
   }
 );
 
-/*
-========================================================
-ADMIN DATA
-========================================================
-*/
+/* =====================================================
+   ADMIN DATA
+===================================================== */
 
 app.get(
   "/api/admin/data",
@@ -2358,17 +2156,16 @@ app.get(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not load admin data."
       });
     }
   }
 );
 
-/*
-========================================================
-ADMIN RECEIPT
-========================================================
-*/
+/* =====================================================
+   ADMIN RECEIPT
+===================================================== */
 
 app.get(
   "/api/admin/payment/:id/receipt",
@@ -2435,17 +2232,16 @@ app.get(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not load receipt."
       });
     }
   }
 );
 
-/*
-========================================================
-ADMIN APPROVE PAYMENT
-========================================================
-*/
+/* =====================================================
+   ADMIN APPROVE PAYMENT
+===================================================== */
 
 app.post(
   "/api/admin/payment/:id/approve",
@@ -2533,17 +2329,16 @@ app.post(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not approve payment."
       });
     }
   }
 );
 
-/*
-========================================================
-ADMIN REJECT PAYMENT
-========================================================
-*/
+/* =====================================================
+   ADMIN REJECT PAYMENT
+===================================================== */
 
 app.post(
   "/api/admin/payment/:id/reject",
@@ -2594,17 +2389,16 @@ app.post(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not reject payment."
       });
     }
   }
 );
 
-/*
-========================================================
-ADMIN MANUAL USER APPROVAL
-========================================================
-*/
+/* =====================================================
+   ADMIN MANUAL USER APPROVAL
+===================================================== */
 
 app.post(
   "/api/admin/user/:id/approve",
@@ -2659,17 +2453,16 @@ app.post(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not approve user."
       });
     }
   }
 );
 
-/*
-========================================================
-ADMIN CREATE SIGNAL
-========================================================
-*/
+/* =====================================================
+   ADMIN CREATE SIGNAL
+===================================================== */
 
 app.post(
   "/api/admin/signals",
@@ -2722,17 +2515,16 @@ app.post(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not create signal."
       });
     }
   }
 );
 
-/*
-========================================================
-ADMIN DELETE SIGNAL
-========================================================
-*/
+/* =====================================================
+   ADMIN DELETE SIGNAL
+===================================================== */
 
 app.delete(
   "/api/admin/signals/:id",
@@ -2769,17 +2561,16 @@ app.delete(
 
       res.status(500).json({
         error:
+          error?.message ||
           "Could not delete signal."
       });
     }
   }
 );
 
-/*
-========================================================
-GLOBAL ERROR HANDLER
-========================================================
-*/
+/* =====================================================
+   GLOBAL ERROR HANDLER
+===================================================== */
 
 app.use(
   (
@@ -2822,10 +2613,8 @@ app.use(
   }
 );
 
-/*
-========================================================
-EXPORT
-========================================================
-*/
+/* =====================================================
+   EXPORT
+===================================================== */
 
 module.exports = app;
