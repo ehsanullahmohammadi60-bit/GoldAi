@@ -48,7 +48,7 @@ let dbReadyPromise = null;
 async function ensureDatabase() {
   if (!sql) {
     throw new Error(
-      "No database connection string was found. Expected DATABASE_URL, NEON_DATABASE_URL, POSTGRES_URL, POSTGRES_URL_NON_POOLING, or POSTGRES_PRISMA_URL."
+      "No database connection string was found."
     );
   }
 
@@ -126,95 +126,20 @@ async function ensureDatabase() {
       `;
 
       /*
-       * IMPORTANT:
-       * Do NOT run COALESCE(MAX(id), 0) on every table.
+       * IMPORTANT
        *
-       * Some existing databases may have TEXT ids.
-       * That was the source of:
+       * The existing Neon database may already have an old
+       * analyses table where id is NOT NULL but has no DEFAULT.
        *
-       * "COALESCE types text and integer cannot be matched"
+       * We do NOT use COALESCE(MAX(id), 0) globally.
+       * That caused the previous TEXT/INTEGER COALESCE error.
        *
-       * We only repair analyses.id and only when it is
-       * actually a numeric column.
+       * We add the probability field safely.
        */
-
-      const idInfo = await sql`
-        SELECT
-          column_default,
-          is_identity,
-          data_type
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'analyses'
-          AND column_name = 'id'
-        LIMIT 1
+      await sql`
+        ALTER TABLE analyses
+        ADD COLUMN IF NOT EXISTS signal_probability TEXT
       `;
-
-      if (idInfo.length) {
-        const dataType =
-          String(
-            idInfo[0].data_type || ""
-          ).toLowerCase();
-
-        const isNumeric =
-          dataType === "integer" ||
-          dataType === "bigint" ||
-          dataType === "smallint";
-
-        const hasDefault =
-          Boolean(
-            idInfo[0].column_default
-          );
-
-        const isIdentity =
-          idInfo[0].is_identity === "YES";
-
-        if (
-          isNumeric &&
-          !hasDefault &&
-          !isIdentity
-        ) {
-          await sql`
-            CREATE SEQUENCE IF NOT EXISTS analyses_id_seq
-          `;
-
-          const maxRows = await sql`
-            SELECT
-              COALESCE(
-                MAX(id),
-                0::bigint
-              ) AS max_id
-            FROM analyses
-          `;
-
-          const maxId =
-            Number(
-              maxRows[0]?.max_id || 0
-            );
-
-          const nextId =
-            Math.max(
-              maxId + 1,
-              1
-            );
-
-          await sql`
-            SELECT setval(
-              'analyses_id_seq',
-              ${nextId},
-              false
-            )
-          `;
-
-          await sql`
-            ALTER TABLE analyses
-            ALTER COLUMN id
-            SET DEFAULT nextval(
-              'analyses_id_seq'
-            )
-          `;
-        }
-      }
     })().catch((error) => {
       dbReadyPromise = null;
       throw error;
@@ -225,7 +150,7 @@ async function ensureDatabase() {
 }
 
 /* =====================================================
-   BASIC ROUTES / HEALTH
+   BASIC ROUTES
 ===================================================== */
 
 app.get("/", (req, res) => {
@@ -236,18 +161,21 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    status: "online"
+  });
+});
+
 app.get("/api", async (req, res) => {
   if (!sql) {
     return res.status(500).json({
       ok: false,
-      service: "GoldAI API",
-      status: "online",
       database: "missing",
       ai: OPENAI_API_KEY
         ? "configured"
-        : "missing",
-      error:
-        "No database connection string is available."
+        : "missing"
     });
   }
 
@@ -266,15 +194,8 @@ app.get("/api", async (req, res) => {
         : "missing"
     });
   } catch (error) {
-    console.error(
-      "API DATABASE HEALTH ERROR:",
-      error
-    );
-
     res.status(500).json({
       ok: false,
-      service: "GoldAI API",
-      status: "online",
       database: "error",
       ai: OPENAI_API_KEY
         ? "configured"
@@ -290,14 +211,9 @@ app.get("/api/health", async (req, res) => {
   if (!sql) {
     return res.status(500).json({
       ok: false,
-      service: "GoldAI API",
-      status: "online",
       database: "missing",
-      ai: OPENAI_API_KEY
-        ? "configured"
-        : "missing",
       error:
-        "No database connection string is available to this deployment."
+        "Database connection string is not available."
     });
   }
 
@@ -316,31 +232,17 @@ app.get("/api/health", async (req, res) => {
         : "missing"
     });
   } catch (error) {
-    console.error(
-      "DATABASE HEALTH ERROR:",
-      error
-    );
-
     res.status(500).json({
       ok: false,
-      service: "GoldAI API",
-      status: "online",
       database: "error",
       ai: OPENAI_API_KEY
         ? "configured"
         : "missing",
       error:
         error?.message ||
-        "Neon database connection failed."
+        "Database connection failed."
     });
   }
-});
-
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    status: "online"
-  });
 });
 
 /* =====================================================
@@ -578,12 +480,7 @@ function getSession(req) {
     }
 
     return payload;
-  } catch (error) {
-    console.error(
-      "SESSION ERROR:",
-      error
-    );
-
+  } catch {
     return null;
   }
 }
@@ -652,7 +549,7 @@ function formatUser(row) {
 }
 
 /* =====================================================
-   AUTH
+   AUTH MIDDLEWARE
 ===================================================== */
 
 async function requireUser(
@@ -693,11 +590,6 @@ async function requireUser(
 
     next();
   } catch (error) {
-    console.error(
-      "AUTH ERROR:",
-      error
-    );
-
     res.status(500).json({
       error:
         "Authentication failed."
@@ -751,12 +643,7 @@ async function requireApprovedUser(
     }
 
     next();
-  } catch (error) {
-    console.error(
-      "APPROVED USER ERROR:",
-      error
-    );
-
+  } catch {
     res.status(500).json({
       error:
         "Access verification failed."
@@ -912,13 +799,6 @@ app.post(
           RETURNING *
         `;
 
-      if (!rows.length) {
-        return res.status(500).json({
-          error:
-            "Account could not be created."
-        });
-      }
-
       setSessionCookie(
         req,
         res,
@@ -999,8 +879,8 @@ app.post(
       const user =
         rows[0];
 
-      const valid =
-        checkPassword(
+      if (
+        !checkPassword(
           password,
           {
             salt:
@@ -1008,9 +888,8 @@ app.post(
             hash:
               user.password_hash
           }
-        );
-
-      if (!valid) {
+        )
+      ) {
         return res.status(401).json({
           error:
             "Invalid email or password."
@@ -1033,11 +912,6 @@ app.post(
           formatUser(user)
       });
     } catch (error) {
-      console.error(
-        "LOGIN ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -1094,19 +968,18 @@ app.get(
   requireUser,
   async (req, res) => {
     try {
-      const rows =
+      const userRows =
         await sql`
-          SELECT
-            approved
+          SELECT approved
           FROM users
           WHERE id = ${req.user.id}
           LIMIT 1
         `;
 
       const approved =
-        rows.length
+        userRows.length
           ? Boolean(
-              rows[0].approved
+              userRows[0].approved
             )
           : false;
 
@@ -1131,12 +1004,7 @@ app.get(
         approved,
         payments
       });
-    } catch (error) {
-      console.error(
-        "ACCESS ERROR:",
-        error
-      );
-
+    } catch {
       res.status(500).json({
         error:
           "Could not check access."
@@ -1152,9 +1020,7 @@ app.get(
 app.post(
   "/api/payment",
   requireUser,
-  upload.single(
-    "receipt"
-  ),
+  upload.single("receipt"),
   async (req, res) => {
     try {
       const method =
@@ -1167,15 +1033,11 @@ app.post(
           req.body?.reference || ""
         ).trim();
 
-      const allowedMethods = [
-        "HesabPay",
-        "Binance Pay"
-      ];
-
       if (
-        !allowedMethods.includes(
-          method
-        )
+        ![
+          "HesabPay",
+          "Binance Pay"
+        ].includes(method)
       ) {
         return res.status(400).json({
           error:
@@ -1183,32 +1045,22 @@ app.post(
         });
       }
 
-      let amount = null;
-
-      if (
+      const amount =
         method === "HesabPay"
-      ) {
-        amount = 240;
-      }
+          ? 240
+          : 4;
 
-      if (
-        method === "Binance Pay"
-      ) {
-        amount = 4;
-      }
+      const receiptData =
+        req.file
+          ? req.file.buffer.toString(
+              "base64"
+            )
+          : null;
 
-      let receiptData = null;
-      let receiptMime = null;
-
-      if (req.file) {
-        receiptData =
-          req.file.buffer.toString(
-            "base64"
-          );
-
-        receiptMime =
-          req.file.mimetype;
-      }
+      const receiptMime =
+        req.file
+          ? req.file.mimetype
+          : null;
 
       const rows =
         await sql`
@@ -1245,11 +1097,6 @@ app.post(
           rows[0]
       });
     } catch (error) {
-      console.error(
-        "PAYMENT ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -1299,11 +1146,6 @@ app.post(
           rows[0]
       });
     } catch (error) {
-      console.error(
-        "SUPPORT ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -1335,12 +1177,7 @@ app.get(
         signals:
           rows
       });
-    } catch (error) {
-      console.error(
-        "SIGNALS ERROR:",
-        error
-      );
-
+    } catch {
       res.status(500).json({
         error:
           "Could not load signals."
@@ -1434,9 +1271,7 @@ function extractResponseText(
       }
     }
 
-    if (text.trim()) {
-      return text.trim();
-    }
+    return text.trim();
   }
 
   return "";
@@ -1450,8 +1285,7 @@ function findJsonObject(
   }
 
   let cleaned =
-    String(text)
-      .trim();
+    String(text).trim();
 
   cleaned =
     cleaned
@@ -1501,6 +1335,10 @@ function findJsonObject(
   }
 }
 
+/* =====================================================
+   NORMALIZE AI RESULT
+===================================================== */
+
 function normalizeAnalysis(
   parsed,
   timeframe
@@ -1510,7 +1348,36 @@ function normalizeAnalysis(
       parsed?.direction || ""
     ).toUpperCase();
 
-  const direction =
+  const rawProbability =
+    Number(
+      String(
+        parsed?.probability ??
+        parsed?.signal_probability ??
+        ""
+      )
+        .replace(
+          "%",
+          ""
+        )
+        .trim()
+    );
+
+  const probability =
+    Number.isFinite(
+      rawProbability
+    )
+      ? Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              rawProbability
+            )
+          )
+        )
+      : 0;
+
+  let direction =
     [
       "BUY",
       "SELL",
@@ -1520,6 +1387,19 @@ function normalizeAnalysis(
     )
       ? rawDirection
       : "WAIT";
+
+  /*
+   * FINAL SIGNAL RULE:
+   *
+   * < 20%  => WAIT
+   * >= 20% => BUY/SELL only when AI sees
+   *           a real directional setup.
+   */
+  if (
+    probability < 20
+  ) {
+    direction = "WAIT";
+  }
 
   const rawConfidence =
     String(
@@ -1544,6 +1424,12 @@ function normalizeAnalysis(
     timeframe,
 
     direction,
+
+    probability:
+      probability + "%",
+
+    signal_probability:
+      probability + "%",
 
     entry:
       parsed?.entry ?? "",
@@ -1581,6 +1467,126 @@ function normalizeAnalysis(
 }
 
 /* =====================================================
+   FINAL FIX FOR analyses.id
+===================================================== */
+
+async function getNextAnalysisId() {
+  const info =
+    await sql`
+      SELECT
+        data_type,
+        udt_name,
+        column_default,
+        is_identity
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'analyses'
+        AND column_name = 'id'
+      LIMIT 1
+    `;
+
+  if (!info.length) {
+    throw new Error(
+      "The analyses.id column was not found."
+    );
+  }
+
+  const dataType =
+    String(
+      info[0].data_type || ""
+    ).toLowerCase();
+
+  const udtName =
+    String(
+      info[0].udt_name || ""
+    ).toLowerCase();
+
+  const hasDefault =
+    Boolean(
+      info[0].column_default
+    );
+
+  const isIdentity =
+    info[0].is_identity === "YES";
+
+  /*
+   * If PostgreSQL already has a DEFAULT or IDENTITY,
+   * let PostgreSQL generate the ID.
+   */
+  if (
+    hasDefault ||
+    isIdentity
+  ) {
+    return null;
+  }
+
+  /*
+   * UUID / TEXT legacy ID.
+   */
+  if (
+    dataType === "uuid" ||
+    udtName === "uuid" ||
+    dataType === "text" ||
+    dataType === "character varying" ||
+    dataType === "character"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  /*
+   * INTEGER / BIGINT / SMALLINT legacy ID.
+   */
+  const numeric =
+    dataType === "integer" ||
+    dataType === "bigint" ||
+    dataType === "smallint";
+
+  if (!numeric) {
+    throw new Error(
+      "Unsupported analyses.id type: " +
+      dataType
+    );
+  }
+
+  /*
+   * Do NOT use COALESCE here.
+   * MAX(id) is executed only after we confirmed
+   * that id is numeric.
+   */
+  const rows =
+    await sql`
+      SELECT MAX(id) AS max_id
+      FROM analyses
+    `;
+
+  const maxRaw =
+    rows[0]?.max_id;
+
+  const maxId =
+    maxRaw === null ||
+    maxRaw === undefined ||
+    maxRaw === ""
+      ? 0
+      : Number(
+          maxRaw
+        );
+
+  if (
+    !Number.isFinite(
+      maxId
+    )
+  ) {
+    throw new Error(
+      "Could not determine the next analyses.id."
+    );
+  }
+
+  return Math.floor(
+    maxId
+  ) + 1;
+}
+
+/* =====================================================
    OPENAI
 ===================================================== */
 
@@ -1599,7 +1605,8 @@ async function requestAIAnalysis(
             "application/json",
 
           Authorization:
-            `Bearer ${OPENAI_API_KEY}`
+            "Bearer " +
+            OPENAI_API_KEY
         },
 
         body:
@@ -1665,14 +1672,10 @@ async function requestAIAnalysis(
 app.post(
   "/api/analyze-chart",
   requireApprovedUser,
-  upload.single(
-    "chart"
-  ),
+  upload.single("chart"),
   async (req, res) => {
     try {
-      if (
-        !OPENAI_API_KEY
-      ) {
+      if (!OPENAI_API_KEY) {
         return res.status(500).json({
           error:
             "OPENAI_API_KEY is not configured."
@@ -1730,30 +1733,39 @@ You are GoldAI, an XAUUSD technical chart analyzer.
 Selected timeframe: ${timeframe}
 Interface language: ${languageName}
 
-Analyze ONLY information visible in the uploaded image.
+Analyze ONLY information visible in the uploaded chart.
 
-Look at visible:
-- XAUUSD price
+Study:
+- current visible XAUUSD price
 - candlestick structure
 - trend
 - support
 - resistance
-- visible indicators
+- market structure
 - momentum if visible
 - breakout or rejection
-- market structure
+- visible indicators
 - nearby visible price levels
 
-Do not invent information that cannot be seen.
+Do not invent invisible information.
 Do not guarantee profit.
-If evidence is insufficient, use WAIT.
 
-Return ONLY one valid JSON object with exactly these fields:
+IMPORTANT SIGNAL RULE:
+
+1. Return a probability from 0 to 100.
+2. If probability is LESS THAN 20, direction MUST be WAIT.
+3. If probability is 20 OR HIGHER and there is a real directional setup, return BUY or SELL.
+4. Do not use WAIT simply because confidence is Low.
+5. Do not invent BUY or SELL if the chart genuinely has no directional evidence.
+6. A 20%+ signal is only an analytical estimate and is NOT a guarantee of profit.
+
+Return ONLY valid JSON:
 
 {
   "symbol": "XAUUSD",
   "timeframe": "${timeframe}",
   "direction": "BUY",
+  "probability": 35,
   "entry": "0000",
   "tp1": "0000",
   "tp2": "0000",
@@ -1767,8 +1779,9 @@ Return ONLY one valid JSON object with exactly these fields:
 }
 
 direction must be BUY, SELL or WAIT.
+probability must be a number from 0 to 100.
 confidence must be Low, Medium or High.
-The timeframe must remain exactly "${timeframe}".
+timeframe must remain exactly "${timeframe}".
 
 Write analysis and warning in ${languageName}.
 
@@ -1802,31 +1815,50 @@ Return JSON only.
           aiResult.data
         );
 
+      /*
+       * Retry if OpenAI returned no readable text.
+       */
       if (!responseText) {
         const retryPrompt = `
-Analyze this XAUUSD chart for the selected ${timeframe} timeframe.
+Analyze this XAUUSD chart.
+
+Selected timeframe: ${timeframe}
 
 Return ONLY valid JSON:
 
 {
-  "symbol":"XAUUSD",
-  "timeframe":"${timeframe}",
-  "direction":"WAIT",
-  "entry":"",
-  "tp1":"",
-  "tp2":"",
-  "tp3":"",
-  "tp4":"",
-  "tp5":"",
-  "sl":"",
-  "confidence":"Low",
-  "analysis":"",
-  "warning":""
+  "symbol": "XAUUSD",
+  "timeframe": "${timeframe}",
+  "direction": "WAIT",
+  "probability": 0,
+  "entry": "",
+  "tp1": "",
+  "tp2": "",
+  "tp3": "",
+  "tp4": "",
+  "tp5": "",
+  "sl": "",
+  "confidence": "Low",
+  "analysis": "",
+  "warning": ""
 }
 
 Use only visible chart information.
+
+Probability must be 0 to 100.
+
+If probability is below 20:
+direction = WAIT.
+
+If probability is 20 or higher and there is a real directional setup:
+direction = BUY or SELL.
+
+Do not invent a direction.
 Do not guarantee profit.
+
 Write analysis and warning in ${languageName}.
+
+Return JSON only.
 `;
 
         aiResult =
@@ -1855,7 +1887,7 @@ Write analysis and warning in ${languageName}.
       if (!responseText) {
         return res.status(502).json({
           error:
-            "AI returned no readable text output. Please try again."
+            "AI returned no readable analysis. Please try again."
         });
       }
 
@@ -1887,66 +1919,143 @@ Write analysis and warning in ${languageName}.
         );
 
       /*
-       * Do not manually insert analyses.id.
-       * PostgreSQL will generate it when the existing
-       * analyses.id column is numeric and has a default.
+       * FINAL ID FIX
+       *
+       * This is the important part.
+       *
+       * We no longer assume analyses.id has a DEFAULT.
+       * If it does not, a valid ID is generated explicitly.
        */
+      const generatedAnalysisId =
+        await getNextAnalysisId();
 
-      const saved =
-        await sql`
-          INSERT INTO analyses (
-            user_id,
-            symbol,
-            timeframe,
-            direction,
-            entry,
-            tp1,
-            tp2,
-            tp3,
-            tp4,
-            tp5,
-            sl,
-            confidence,
-            analysis,
-            warning
-          )
-          VALUES (
-            ${req.user.id},
-            ${result.symbol},
-            ${result.timeframe},
-            ${result.direction},
-            ${String(
-              result.entry
-            )},
-            ${String(
-              result.tp1
-            )},
-            ${String(
-              result.tp2
-            )},
-            ${String(
-              result.tp3
-            )},
-            ${String(
-              result.tp4
-            )},
-            ${String(
-              result.tp5
-            )},
-            ${String(
-              result.sl
-            )},
-            ${result.confidence},
-            ${result.analysis},
-            ${result.warning}
-          )
-          RETURNING *
-        `;
+      let saved;
+
+      if (
+        generatedAnalysisId === null
+      ) {
+        /*
+         * PostgreSQL already generates ID.
+         */
+        saved =
+          await sql`
+            INSERT INTO analyses (
+              user_id,
+              symbol,
+              timeframe,
+              direction,
+              signal_probability,
+              entry,
+              tp1,
+              tp2,
+              tp3,
+              tp4,
+              tp5,
+              sl,
+              confidence,
+              analysis,
+              warning
+            )
+            VALUES (
+              ${req.user.id},
+              ${result.symbol},
+              ${result.timeframe},
+              ${result.direction},
+              ${result.signal_probability},
+              ${String(
+                result.entry
+              )},
+              ${String(
+                result.tp1
+              )},
+              ${String(
+                result.tp2
+              )},
+              ${String(
+                result.tp3
+              )},
+              ${String(
+                result.tp4
+              )},
+              ${String(
+                result.tp5
+              )},
+              ${String(
+                result.sl
+              )},
+              ${result.confidence},
+              ${result.analysis},
+              ${result.warning}
+            )
+            RETURNING *
+          `;
+      } else {
+        /*
+         * Legacy database without ID DEFAULT.
+         * Explicitly provide the generated ID.
+         */
+        saved =
+          await sql`
+            INSERT INTO analyses (
+              id,
+              user_id,
+              symbol,
+              timeframe,
+              direction,
+              signal_probability,
+              entry,
+              tp1,
+              tp2,
+              tp3,
+              tp4,
+              tp5,
+              sl,
+              confidence,
+              analysis,
+              warning
+            )
+            VALUES (
+              ${generatedAnalysisId},
+              ${req.user.id},
+              ${result.symbol},
+              ${result.timeframe},
+              ${result.direction},
+              ${result.signal_probability},
+              ${String(
+                result.entry
+              )},
+              ${String(
+                result.tp1
+              )},
+              ${String(
+                result.tp2
+              )},
+              ${String(
+                result.tp3
+              )},
+              ${String(
+                result.tp4
+              )},
+              ${String(
+                result.tp5
+              )},
+              ${String(
+                result.sl
+              )},
+              ${result.confidence},
+              ${result.analysis},
+              ${result.warning}
+            )
+            RETURNING *
+          `;
+      }
 
       res.json({
         ok: true,
+
         analysis:
           result,
+
         saved:
           saved[0]
       });
@@ -1989,13 +2098,9 @@ app.get(
           rows
       });
     } catch (error) {
-      console.error(
-        "ANALYSES ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
+          error?.message ||
           "Could not load analysis history."
       });
     }
@@ -2149,11 +2254,6 @@ app.get(
         support
       });
     } catch (error) {
-      console.error(
-        "ADMIN DATA ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -2225,11 +2325,6 @@ app.get(
         )
       );
     } catch (error) {
-      console.error(
-        "RECEIPT ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -2282,33 +2377,13 @@ app.post(
       const payment =
         paymentRows[0];
 
-      if (
-        payment.status ===
-        "approved"
-      ) {
-        await sql`
-          UPDATE users
-          SET approved = TRUE
-          WHERE id = ${payment.user_id}
-        `;
-
-        return res.json({
-          ok: true,
-          alreadyApproved:
-            true,
-          payment
-        });
-      }
-
-      const rows =
-        await sql`
-          UPDATE payments
-          SET
-            status = 'approved',
-            reviewed_at = NOW()
-          WHERE id = ${id}
-          RETURNING *
-        `;
+      await sql`
+        UPDATE payments
+        SET
+          status = 'approved',
+          reviewed_at = NOW()
+        WHERE id = ${id}
+      `;
 
       await sql`
         UPDATE users
@@ -2316,17 +2391,20 @@ app.post(
         WHERE id = ${payment.user_id}
       `;
 
+      const rows =
+        await sql`
+          SELECT *
+          FROM payments
+          WHERE id = ${id}
+          LIMIT 1
+        `;
+
       res.json({
         ok: true,
         payment:
           rows[0]
       });
     } catch (error) {
-      console.error(
-        "APPROVE ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -2382,11 +2460,6 @@ app.post(
           rows[0]
       });
     } catch (error) {
-      console.error(
-        "REJECT ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -2397,7 +2470,7 @@ app.post(
 );
 
 /* =====================================================
-   ADMIN MANUAL USER APPROVAL
+   ADMIN USER APPROVAL
 ===================================================== */
 
 app.post(
@@ -2446,11 +2519,6 @@ app.post(
           rows[0]
       });
     } catch (error) {
-      console.error(
-        "USER APPROVE ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -2508,11 +2576,6 @@ app.post(
           rows[0]
       });
     } catch (error) {
-      console.error(
-        "CREATE SIGNAL ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
@@ -2554,11 +2617,6 @@ app.delete(
         ok: true
       });
     } catch (error) {
-      console.error(
-        "DELETE SIGNAL ERROR:",
-        error
-      );
-
       res.status(500).json({
         error:
           error?.message ||
