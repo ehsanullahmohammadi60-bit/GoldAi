@@ -1,27 +1,54 @@
-const $ = (id) => document.getElementById(id);
+const $ = (id) =>
+  document.getElementById(id);
 
 let currentUser = null;
 let selectedChartFile = null;
 
-/* =========================
-   HELPERS
-========================= */
+let selectedTimeframe = "1m";
+let selectedPaymentMethod =
+  "hesabpay";
 
-function showMessage(id, text, type = "") {
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function showMessage(
+  id,
+  text,
+  type = ""
+) {
   const el = $(id);
+
   if (!el) return;
 
-  el.textContent = text || "";
-  el.className = type ? `message ${type}` : "message";
+  el.textContent =
+    text || "";
+
+  el.className =
+    type
+      ? `message ${type}`
+      : "message";
 }
 
-async function api(url, options = {}) {
-  const response = await fetch(url, options);
+async function api(
+  url,
+  options = {}
+) {
+  const response =
+    await fetch(
+      url,
+      {
+        credentials:
+          "include",
+        ...options
+      }
+    );
 
   let data = {};
 
   try {
-    data = await response.json();
+    data =
+      await response.json();
   } catch (_) {
     data = {};
   }
@@ -37,7 +64,10 @@ async function api(url, options = {}) {
   return data;
 }
 
-function textValue(value, fallback = "صبر کن") {
+function textValue(
+  value,
+  fallback = "WAIT"
+) {
   if (
     value === undefined ||
     value === null ||
@@ -49,16 +79,29 @@ function textValue(value, fallback = "صبر کن") {
   return String(value);
 }
 
-function getField(obj, names, fallback = "صبر کن") {
-  if (!obj || typeof obj !== "object") {
+function getField(
+  obj,
+  names,
+  fallback = "WAIT"
+) {
+  if (
+    !obj ||
+    typeof obj !==
+      "object"
+  ) {
     return fallback;
   }
 
-  for (const name of names) {
+  for (
+    const name of names
+  ) {
     if (
-      obj[name] !== undefined &&
+      obj[name] !==
+        undefined &&
       obj[name] !== null &&
-      String(obj[name]).trim() !== ""
+      String(
+        obj[name]
+      ).trim() !== ""
     ) {
       return obj[name];
     }
@@ -67,191 +110,122 @@ function getField(obj, names, fallback = "صبر کن") {
   return fallback;
 }
 
-function escapeHtml(value) {
-  if (value === undefined || value === null) {
+function escapeHtml(
+  value
+) {
+  if (
+    value ===
+      undefined ||
+    value === null
+  ) {
     return "";
   }
 
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
 }
 
-/* =========================
+/* =========================================================
    REGISTER
-========================= */
+========================================================= */
 
-async function registerUser(event) {
+async function registerUser(
+  event
+) {
   event.preventDefault();
 
-  const form = event.currentTarget;
+  const form =
+    event.currentTarget;
 
-  const nameInput =
-    form.querySelector('input[name="name"]') ||
-    form.querySelector('input[placeholder*="نام"]') ||
-    form.querySelectorAll("input")[0];
-
-  const emailInput =
-    form.querySelector('input[type="email"]') ||
-    form.querySelector('input[name="email"]');
-
-  const passwordInput =
-    form.querySelector('input[type="password"]') ||
-    form.querySelector('input[name="password"]');
-
-  const name = nameInput?.value.trim() || "";
-  const email = emailInput?.value.trim() || "";
-  const password = passwordInput?.value || "";
-
-  if (!name || !email || !password) {
-    showMessage(
-      "authMsg",
-      "لطفاً تمام معلومات را وارد کنید.",
-      "error"
-    );
-    return;
-  }
-
-  try {
-    showMessage("authMsg", "در حال ساخت حساب...");
-
-    const data = await api("/api/register", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        name,
-        email,
-        password
-      })
-    });
-
-    currentUser = data.user || null;
-
-    showMessage(
-      "authMsg",
-      data.message || "حساب با موفقیت ساخته شد.",
-      "success"
-    );
-
-    await load();
-
-  } catch (error) {
-    console.error("REGISTER ERROR:", error);
-
-    showMessage(
-      "authMsg",
-      error.message,
-      "error"
-    );
-  }
-}
-
-/* =========================
-   LOGIN
-========================= */
-
-async function loginUser(event) {
-  event.preventDefault();
-
-  const form = event.currentTarget;
-
-  /*
-    مهم:
-    این نسخه ایمیل و رمز عبور را مستقیماً
-    از خود فرم Login پیدا می‌کند.
-    بنابراین وابسته به loginEmail/loginPassword نیست.
-  */
-
-  const inputs = Array.from(
-    form.querySelectorAll("input")
-  );
-
-  const emailInput =
-    form.querySelector('input[type="email"]') ||
-    form.querySelector('input[name="email"]') ||
-    inputs.find((input) =>
-      (
-        input.name +
-        " " +
-        input.id +
-        " " +
-        input.placeholder
-      )
-        .toLowerCase()
-        .includes("email")
-    );
-
-  const passwordInput =
-    form.querySelector('input[type="password"]') ||
-    form.querySelector('input[name="password"]') ||
-    inputs.find((input) =>
-      (
-        input.name +
-        " " +
-        input.id +
-        " " +
-        input.placeholder
-      )
-        .toLowerCase()
-        .includes("password")
-    );
+  const name =
+    $("regName")?.value
+      .trim() || "";
 
   const email =
-    emailInput?.value.trim() || "";
+    $("regEmail")?.value
+      .trim() || "";
 
   const password =
-    passwordInput?.value || "";
+    $("regPass")?.value || "";
 
-  console.log("LOGIN FORM:", {
-    emailFound: !!emailInput,
-    passwordFound: !!passwordInput,
-    emailLength: email.length,
-    passwordLength: password.length
-  });
-
-  if (!email || !password) {
+  if (
+    !name ||
+    !email ||
+    !password
+  ) {
     showMessage(
       "authMsg",
-      "ایمیل و رمز عبور را وارد کنید.",
+      "Please fill in all information.",
       "error"
     );
+
     return;
   }
 
   try {
     showMessage(
       "authMsg",
-      "در حال ورود..."
+      "Creating account..."
     );
 
-    const data = await api("/api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        email,
-        password
-      })
-    });
+    const data =
+      await api(
+        "/api/register",
+        {
+          method:
+            "POST",
 
-    currentUser = data.user || null;
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              name,
+              email,
+              password
+            })
+        }
+      );
+
+    currentUser =
+      data.user ||
+      null;
 
     showMessage(
       "authMsg",
-      data.message || "ورود موفق بود.",
+      data.message ||
+        "Account created successfully.",
       "success"
     );
 
     await load();
 
   } catch (error) {
-    console.error("LOGIN ERROR:", error);
+    console.error(
+      "REGISTER ERROR:",
+      error
+    );
 
     showMessage(
       "authMsg",
@@ -261,98 +235,262 @@ async function loginUser(event) {
   }
 }
 
-/* =========================
+/* =========================================================
+   LOGIN
+========================================================= */
+
+async function loginUser(
+  event
+) {
+  event.preventDefault();
+
+  const email =
+    $("loginEmail")
+      ?.value
+      .trim() || "";
+
+  const password =
+    $("loginPass")
+      ?.value || "";
+
+  if (
+    !email ||
+    !password
+  ) {
+    showMessage(
+      "authMsg",
+      "Please enter your email and password.",
+      "error"
+    );
+
+    return;
+  }
+
+  try {
+    showMessage(
+      "authMsg",
+      "Logging in..."
+    );
+
+    const data =
+      await api(
+        "/api/login",
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              email,
+              password
+            })
+        }
+      );
+
+    currentUser =
+      data.user ||
+      null;
+
+    showMessage(
+      "authMsg",
+      data.message ||
+        "Login successful.",
+      "success"
+    );
+
+    await load();
+
+  } catch (error) {
+    console.error(
+      "LOGIN ERROR:",
+      error
+    );
+
+    showMessage(
+      "authMsg",
+      error.message,
+      "error"
+    );
+  }
+}
+
+/* =========================================================
    LOGOUT
-========================= */
+========================================================= */
 
 async function logoutUser() {
   try {
-    await api("/api/logout", {
-      method: "POST"
-    });
+    await api(
+      "/api/logout",
+      {
+        method:
+          "POST"
+      }
+    );
   } catch (_) {}
 
-  currentUser = null;
+  currentUser =
+    null;
 
-  const authSection = $("authSection");
-  const dashboard = $("dashboard");
+  const auth =
+    $("auth");
 
-  if (authSection) {
-    authSection.style.display = "";
+  const dashboard =
+    $("dashboard");
+
+  if (auth) {
+    auth.style.display =
+      "";
   }
 
   if (dashboard) {
-    dashboard.style.display = "none";
+    dashboard.style.display =
+      "none";
   }
 }
 
-/* =========================
-   PAYMENT
-========================= */
+/* =========================================================
+   PAYMENT METHOD
+========================================================= */
 
-async function submitPayment(event) {
+function updatePaymentDetails() {
+  const details =
+    $("payDetails");
+
+  if (!details) {
+    return;
+  }
+
+  if (
+    selectedPaymentMethod ===
+    "binance"
+  ) {
+    details.innerHTML = `
+      <strong>Binance Pay</strong>
+      <p>
+        Payment amount: <b>4 USD / USDT</b>
+      </p>
+      <p>
+        Send your payment and enter the transaction reference below.
+      </p>
+    `;
+  } else {
+    details.innerHTML = `
+      <strong>HesabPay</strong>
+      <p>
+        Payment amount: <b>240 AFN</b>
+      </p>
+      <p>
+        Send your payment and enter the transaction reference below.
+      </p>
+    `;
+  }
+}
+
+function setupPaymentMethods() {
+  const buttons =
+    document.querySelectorAll(
+      ".pay[data-method]"
+    );
+
+  buttons.forEach(
+    (button) => {
+      button.addEventListener(
+        "click",
+        () => {
+          selectedPaymentMethod =
+            button.dataset.method ||
+            "hesabpay";
+
+          buttons.forEach(
+            (item) => {
+              if (
+                item.dataset.method
+              ) {
+                item.classList.remove(
+                  "active"
+                );
+              }
+            }
+          );
+
+          button.classList.add(
+            "active"
+          );
+
+          updatePaymentDetails();
+        }
+      );
+    }
+  );
+
+  updatePaymentDetails();
+}
+
+/* =========================================================
+   PAYMENT
+========================================================= */
+
+async function submitPayment(
+  event
+) {
   event.preventDefault();
 
-  const form = event.currentTarget;
-
-  const referenceInput =
-    form.querySelector(
-      'input[name="reference"]'
-    ) ||
-    $("paymentReference") ||
-    $("reference");
-
-  const methodInput =
-    form.querySelector(
-      'select[name="method"]'
-    ) ||
-    form.querySelector(
-      'input[name="method"]'
-    ) ||
-    $("paymentMethod") ||
-    $("method");
-
-  const receiptInput =
-    form.querySelector(
-      'input[type="file"]'
-    ) ||
-    $("receipt") ||
-    $("paymentReceipt");
-
   const reference =
-    referenceInput?.value.trim() || "";
-
-  const method =
-    methodInput?.value || "manual";
+    $("reference")
+      ?.value
+      .trim() || "";
 
   const file =
-    receiptInput?.files?.[0];
+    $("receipt")
+      ?.files?.[0];
 
   if (!reference) {
     showMessage(
-      "paymentMsg",
-      "لطفاً شماره یا Reference پرداخت را وارد کنید.",
+      "payMsg",
+      "Please enter the payment reference.",
       "error"
     );
+
     return;
   }
 
   if (!file) {
     showMessage(
-      "paymentMsg",
-      "لطفاً رسید پرداخت را انتخاب کنید.",
+      "payMsg",
+      "Please select your payment receipt.",
       "error"
     );
+
+    return;
+  }
+
+  if (
+    file.size >
+    5 * 1024 * 1024
+  ) {
+    showMessage(
+      "payMsg",
+      "Receipt image must be 5 MB or smaller.",
+      "error"
+    );
+
     return;
   }
 
   try {
     showMessage(
-      "paymentMsg",
-      "در حال ارسال رسید..."
+      "payMsg",
+      "Uploading payment receipt..."
     );
 
-    const formData = new FormData();
+    const formData =
+      new FormData();
 
     formData.append(
       "reference",
@@ -361,7 +499,15 @@ async function submitPayment(event) {
 
     formData.append(
       "method",
-      method
+      selectedPaymentMethod
+    );
+
+    formData.append(
+      "amount",
+      selectedPaymentMethod ===
+        "binance"
+        ? "4"
+        : "240"
     );
 
     formData.append(
@@ -369,18 +515,21 @@ async function submitPayment(event) {
       file
     );
 
-    const data = await api(
-      "/api/payment",
-      {
-        method: "POST",
-        body: formData
-      }
-    );
+    const data =
+      await api(
+        "/api/payment",
+        {
+          method:
+            "POST",
+          body:
+            formData
+        }
+      );
 
     showMessage(
-      "paymentMsg",
+      "payMsg",
       data.message ||
-        "رسید ارسال شد و منتظر تأیید ادمین است.",
+        "Payment receipt submitted for review.",
       "success"
     );
 
@@ -393,73 +542,70 @@ async function submitPayment(event) {
     );
 
     showMessage(
-      "paymentMsg",
+      "payMsg",
       error.message,
       "error"
     );
   }
 }
 
-/* =========================
+/* =========================================================
    SUPPORT
-========================= */
+========================================================= */
 
-async function sendSupport(event) {
-  event.preventDefault();
-
-  const form = event.currentTarget;
-
-  const messageInput =
-    form.querySelector(
-      "textarea"
-    ) ||
-    form.querySelector(
-      'input[name="message"]'
-    ) ||
-    $("supportMessage") ||
-    $("message");
-
+async function sendSupport() {
   const message =
-    messageInput?.value.trim() || "";
+    $("supportText")
+      ?.value
+      .trim() || "";
 
   if (!message) {
     showMessage(
       "supportMsg",
-      "لطفاً پیام خود را بنویسید.",
+      "Please write your message.",
       "error"
     );
+
     return;
   }
 
   try {
     showMessage(
       "supportMsg",
-      "در حال ارسال..."
+      "Sending..."
     );
 
-    const data = await api(
-      "/api/support",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
-        body: JSON.stringify({
-          message
-        })
-      }
-    );
+    const data =
+      await api(
+        "/api/support",
+        {
+          method:
+            "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              message
+            })
+        }
+      );
 
     showMessage(
       "supportMsg",
       data.message ||
-        "پیام شما ارسال شد.",
+        "Your message has been sent.",
       "success"
     );
 
-    if (messageInput) {
-      messageInput.value = "";
+    if (
+      $("supportText")
+    ) {
+      $("supportText")
+        .value = "";
     }
 
   } catch (error) {
@@ -476,16 +622,122 @@ async function sendSupport(event) {
   }
 }
 
-/* =========================
-   CHART PREVIEW
-========================= */
+/* =========================================================
+   TIMEFRAME
+========================================================= */
 
-function previewChart(event) {
+function timeframeLabel(
+  timeframe
+) {
+  if (
+    timeframe ===
+    "1m"
+  ) {
+    return "1 Minute";
+  }
+
+  if (
+    timeframe ===
+    "5m"
+  ) {
+    return "5 Minutes";
+  }
+
+  if (
+    timeframe ===
+    "15m"
+  ) {
+    return "15 Minutes";
+  }
+
+  return timeframe;
+}
+
+function setupTimeframes() {
+  const buttons =
+    document.querySelectorAll(
+      ".timeframeOption"
+    );
+
+  buttons.forEach(
+    (button) => {
+      button.addEventListener(
+        "click",
+        () => {
+          const value =
+            button.dataset
+              .timeframe;
+
+          if (
+            ![
+              "1m",
+              "5m",
+              "15m"
+            ].includes(
+              value
+            )
+          ) {
+            return;
+          }
+
+          selectedTimeframe =
+            value;
+
+          buttons.forEach(
+            (item) => {
+              item.classList.remove(
+                "active"
+              );
+            }
+          );
+
+          button.classList.add(
+            "active"
+          );
+
+          const label =
+            timeframeLabel(
+              selectedTimeframe
+            );
+
+          const selectedText =
+            $("selectedTimeframeText");
+
+          if (
+            selectedText
+          ) {
+            selectedText.textContent =
+              `Selected timeframe: ${label}`;
+          }
+
+          setText(
+            "analysisTimeframe",
+            selectedTimeframe
+          );
+
+          showMessage(
+            "chartMsg",
+            `Timeframe selected: ${label}`
+          );
+        }
+      );
+    }
+  );
+}
+
+/* =========================================================
+   CHART PREVIEW
+========================================================= */
+
+function previewChart(
+  event
+) {
   const file =
     event.target.files?.[0];
 
   selectedChartFile =
-    file || null;
+    file ||
+    null;
 
   const previewWrap =
     $("chartPreviewWrap");
@@ -502,8 +754,13 @@ function previewChart(event) {
     return;
   }
 
-  if (!file.type.startsWith("image/")) {
-    selectedChartFile = null;
+  if (
+    !file.type.startsWith(
+      "image/"
+    )
+  ) {
+    selectedChartFile =
+      null;
 
     if (previewWrap) {
       previewWrap.style.display =
@@ -512,7 +769,33 @@ function previewChart(event) {
 
     showMessage(
       "chartMsg",
-      "لطفاً فقط فایل تصویری چارت را انتخاب کنید.",
+      "Please select an image chart.",
+      "error"
+    );
+
+    return;
+  }
+
+  if (
+    file.size >
+    5 * 1024 * 1024
+  ) {
+    selectedChartFile =
+      null;
+
+    if (previewWrap) {
+      previewWrap.style.display =
+        "none";
+    }
+
+    if ($("chartFile")) {
+      $("chartFile")
+        .value = "";
+    }
+
+    showMessage(
+      "chartMsg",
+      "Chart image must be 5 MB or smaller.",
       "error"
     );
 
@@ -521,7 +804,9 @@ function previewChart(event) {
 
   if (preview) {
     preview.src =
-      URL.createObjectURL(file);
+      URL.createObjectURL(
+        file
+      );
   }
 
   if (previewWrap) {
@@ -531,27 +816,64 @@ function previewChart(event) {
 
   showMessage(
     "chartMsg",
-    ""
+    `Chart selected for ${timeframeLabel(
+      selectedTimeframe
+    )}.`
   );
 }
 
-/* =========================
+/* =========================================================
    AI CHART ANALYSIS
-========================= */
+========================================================= */
 
-async function analyzeChart(event) {
+async function analyzeChart(
+  event
+) {
   event.preventDefault();
 
   const file =
     selectedChartFile ||
-    $("chartFile")?.files?.[0];
+    $("chartFile")
+      ?.files?.[0];
 
   if (!file) {
     showMessage(
       "chartMsg",
-      "لطفاً اول عکس چارت XAUUSD را انتخاب کنید.",
+      "Please select the XAUUSD chart first.",
       "error"
     );
+
+    return;
+  }
+
+  if (
+    ![
+      "1m",
+      "5m",
+      "15m"
+    ].includes(
+      selectedTimeframe
+    )
+  ) {
+    showMessage(
+      "chartMsg",
+      "Please select 1m, 5m or 15m.",
+      "error"
+    );
+
+    return;
+  }
+
+  if (
+    file.size >
+    5 * 1024 * 1024
+  ) {
+    showMessage(
+      "chartMsg",
+      "Chart image must be 5 MB or smaller.",
+      "error"
+    );
+
     return;
   }
 
@@ -559,18 +881,21 @@ async function analyzeChart(event) {
     $("analyzeBtn");
 
   if (button) {
-    button.disabled = true;
+    button.disabled =
+      true;
 
     button.dataset.oldText =
       button.textContent;
 
     button.textContent =
-      "در حال تحلیل...";
+      "Analyzing...";
   }
 
   showMessage(
     "chartMsg",
-    "هوش مصنوعی در حال تحلیل چارت است..."
+    `AI is analyzing the XAUUSD ${timeframeLabel(
+      selectedTimeframe
+    )} chart...`
   );
 
   resetAnalysisResult();
@@ -584,12 +909,19 @@ async function analyzeChart(event) {
       file
     );
 
+    formData.append(
+      "timeframe",
+      selectedTimeframe
+    );
+
     const data =
       await api(
         "/api/analyze-chart",
         {
-          method: "POST",
-          body: formData
+          method:
+            "POST",
+          body:
+            formData
         }
       );
 
@@ -604,10 +936,6 @@ async function analyzeChart(event) {
       data.signal ||
       data.data ||
       data;
-
-    /*
-      اگر پاسخ به صورت JSON string باشد
-    */
 
     if (
       typeof analysis ===
@@ -625,10 +953,6 @@ async function analyzeChart(event) {
         };
       }
     }
-
-    /*
-      اگر analysis داخل analysis باشد
-    */
 
     if (
       analysis &&
@@ -654,7 +978,9 @@ async function analyzeChart(event) {
     showMessage(
       "chartMsg",
       data.message ||
-        "تحلیل چارت با موفقیت انجام شد.",
+        `Analysis completed for ${timeframeLabel(
+          selectedTimeframe
+        )}.`,
       "success"
     );
 
@@ -668,7 +994,7 @@ async function analyzeChart(event) {
 
     showMessage(
       "chartMsg",
-      `خطا در تحلیل: ${error.message}`,
+      `Analysis error: ${error.message}`,
       "error"
     );
 
@@ -679,39 +1005,67 @@ async function analyzeChart(event) {
 
       button.textContent =
         button.dataset.oldText ||
-        "تحلیل نمودار با هوش مصنوعی";
+        "Analyze Chart with AI";
     }
   }
 }
 
-/* =========================
+/* =========================================================
    RESET ANALYSIS
-========================= */
+========================================================= */
 
 function resetAnalysisResult() {
-  const ids = [
-    "analysisDirection",
-    "analysisSymbol",
-    "analysisTimeframe",
-    "analysisEntry",
-    "analysisSL",
-    "analysisTP1",
-    "analysisTP2",
-    "analysisTP3",
-    "analysisTP4",
-    "analysisTP5",
-    "analysisConfidence",
-    "analysisTextContent",
-    "analysisWarning"
-  ];
+  const values = {
+    analysisDirection:
+      "WAIT",
 
-  ids.forEach(
-    (id) => {
-      const el = $(id);
+    analysisSymbol:
+      "XAUUSD",
+
+    analysisTimeframe:
+      selectedTimeframe,
+
+    analysisEntry:
+      "WAIT",
+
+    analysisSL:
+      "WAIT",
+
+    analysisTP1:
+      "WAIT",
+
+    analysisTP2:
+      "WAIT",
+
+    analysisTP3:
+      "WAIT",
+
+    analysisTP4:
+      "WAIT",
+
+    analysisTP5:
+      "WAIT",
+
+    analysisConfidence:
+      "Low",
+
+    analysisTextContent:
+      "",
+
+    analysisWarning:
+      ""
+  };
+
+  Object.entries(
+    values
+  ).forEach(
+    ([id, value]) => {
+      const el =
+        $(id);
 
       if (el) {
         el.textContent =
-          "صبر کن";
+          value;
       }
     }
   );
@@ -725,9 +1079,9 @@ function resetAnalysisResult() {
   }
 }
 
-/* =========================
+/* =========================================================
    RENDER ANALYSIS
-========================= */
+========================================================= */
 
 function renderAnalysis(
   analysis
@@ -739,7 +1093,7 @@ function renderAnalysis(
   ) {
     showMessage(
       "chartMsg",
-      "پاسخ هوش مصنوعی قابل خواندن نبود.",
+      "AI response could not be read.",
       "error"
     );
 
@@ -767,7 +1121,8 @@ function renderAnalysis(
         "Action",
         "side",
         "Side"
-      ]
+      ],
+      "WAIT"
     );
 
   const symbol =
@@ -785,6 +1140,7 @@ function renderAnalysis(
     );
 
   const timeframe =
+    selectedTimeframe ||
     getField(
       analysis,
       [
@@ -794,7 +1150,8 @@ function renderAnalysis(
         "interval",
         "Interval",
         "chart_timeframe"
-      ]
+      ],
+      selectedTimeframe
     );
 
   const entry =
@@ -807,7 +1164,8 @@ function renderAnalysis(
         "entryPrice",
         "entry_point",
         "entryPoint"
-      ]
+      ],
+      "WAIT"
     );
 
   const stopLoss =
@@ -820,7 +1178,8 @@ function renderAnalysis(
         "stopLoss",
         "stoploss",
         "stop_loss_price"
-      ]
+      ],
+      "WAIT"
     );
 
   const tp1 =
@@ -832,7 +1191,8 @@ function renderAnalysis(
         "tp_1",
         "take_profit_1",
         "takeProfit1"
-      ]
+      ],
+      "WAIT"
     );
 
   const tp2 =
@@ -844,7 +1204,8 @@ function renderAnalysis(
         "tp_2",
         "take_profit_2",
         "takeProfit2"
-      ]
+      ],
+      "WAIT"
     );
 
   const tp3 =
@@ -856,7 +1217,8 @@ function renderAnalysis(
         "tp_3",
         "take_profit_3",
         "takeProfit3"
-      ]
+      ],
+      "WAIT"
     );
 
   const tp4 =
@@ -868,7 +1230,8 @@ function renderAnalysis(
         "tp_4",
         "take_profit_4",
         "takeProfit4"
-      ]
+      ],
+      "WAIT"
     );
 
   const tp5 =
@@ -880,7 +1243,8 @@ function renderAnalysis(
         "tp_5",
         "take_profit_5",
         "takeProfit5"
-      ]
+      ],
+      "WAIT"
     );
 
   const confidence =
@@ -892,7 +1256,7 @@ function renderAnalysis(
         "confidence_level",
         "confidenceLevel"
       ],
-      "کم"
+      "Low"
     );
 
   const analysisText =
@@ -923,12 +1287,8 @@ function renderAnalysis(
         "risk_warning",
         "riskWarning"
       ],
-      "بازار فارکس دارای ریسک است."
+      "Trading involves market risk."
     );
-
-  /*
-    نمایش اطلاعات
-  */
 
   setText(
     "analysisDirection",
@@ -987,17 +1347,15 @@ function renderAnalysis(
 
   setText(
     "analysisTextContent",
-    analysisText
+    analysisText,
+    ""
   );
 
   setText(
     "analysisWarning",
-    warning
+    warning,
+    ""
   );
-
-  /*
-    BUY / SELL / WAIT
-  */
 
   const directionCard =
     $("directionCard");
@@ -1022,7 +1380,6 @@ function renderAnalysis(
       directionCard.classList.add(
         "buy"
       );
-
     } else if (
       normalized.includes(
         "SELL"
@@ -1031,7 +1388,6 @@ function renderAnalysis(
       directionCard.classList.add(
         "sell"
       );
-
     } else {
       directionCard.classList.add(
         "wait"
@@ -1048,31 +1404,38 @@ function renderAnalysis(
   }
 }
 
-/* =========================
+/* =========================================================
    SET TEXT
-========================= */
+========================================================= */
 
 function setText(
   id,
-  value
+  value,
+  fallback = "WAIT"
 ) {
-  const el = $(id);
+  const el =
+    $(id);
 
   if (!el) return;
 
   el.textContent =
-    textValue(value);
+    textValue(
+      value,
+      fallback
+    );
 }
 
-/* =========================
+/* =========================================================
    HISTORY
-========================= */
+========================================================= */
 
 async function loadHistory() {
   const container =
     $("analysisHistory");
 
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   try {
     const data =
@@ -1087,11 +1450,14 @@ async function loadHistory() {
       [];
 
     if (
-      !Array.isArray(items) ||
-      items.length === 0
+      !Array.isArray(
+        items
+      ) ||
+      items.length ===
+        0
     ) {
       container.innerHTML =
-        "<p>هنوز تحلیل ذخیره‌شده‌ای وجود ندارد.</p>";
+        "<p>No saved analyses yet.</p>";
 
       return;
     }
@@ -1100,89 +1466,61 @@ async function loadHistory() {
       items
         .map(
           (item) => {
-            let analysis =
-              item.analysis ||
-              item.result ||
-              item;
-
-            if (
-              typeof analysis ===
-              "string"
-            ) {
-              try {
-                analysis =
-                  JSON.parse(
-                    analysis
-                  );
-              } catch (_) {
-                analysis = {};
-              }
-            }
-
             const direction =
               getField(
-                analysis,
+                item,
                 [
-                  "direction",
-                  "Direction",
-                  "signal",
-                  "Signal",
-                  "trade_direction",
-                  "action",
-                  "side"
+                  "direction"
                 ],
                 "WAIT"
               );
 
+            const timeframe =
+              getField(
+                item,
+                [
+                  "timeframe"
+                ],
+                "Unknown"
+              );
+
             const entry =
               getField(
-                analysis,
+                item,
                 [
-                  "entry",
-                  "Entry",
-                  "entry_price",
-                  "entryPrice"
+                  "entry"
                 ]
               );
 
             const sl =
               getField(
-                analysis,
+                item,
                 [
-                  "sl",
-                  "SL",
-                  "stop_loss",
-                  "stopLoss"
+                  "sl"
                 ]
               );
 
             const tp1 =
               getField(
-                analysis,
+                item,
                 [
-                  "tp1",
-                  "TP1",
-                  "take_profit_1"
+                  "tp1"
                 ]
               );
 
             const tp2 =
               getField(
-                analysis,
+                item,
                 [
-                  "tp2",
-                  "TP2",
-                  "take_profit_2"
+                  "tp2"
                 ]
               );
 
             const tp3 =
               getField(
-                analysis,
+                item,
                 [
-                  "tp3",
-                  "TP3",
-                  "take_profit_3"
+                  "tp3"
                 ]
               );
 
@@ -1195,6 +1533,13 @@ async function loadHistory() {
                       direction
                     )}
                   </strong>
+                </div>
+
+                <div>
+                  Timeframe:
+                  ${escapeHtml(
+                    timeframe
+                  )}
                 </div>
 
                 <div>
@@ -1245,19 +1590,21 @@ async function loadHistory() {
     );
 
     container.innerHTML =
-      "<p>تاریخچه تحلیل فعلاً قابل دریافت نیست.</p>";
+      "<p>Analysis history is currently unavailable.</p>";
   }
 }
 
-/* =========================
+/* =========================================================
    SIGNALS
-========================= */
+========================================================= */
 
 async function loadSignals() {
   const container =
     $("signals");
 
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   try {
     const data =
@@ -1271,11 +1618,14 @@ async function loadSignals() {
       [];
 
     if (
-      !Array.isArray(signals) ||
-      signals.length === 0
+      !Array.isArray(
+        signals
+      ) ||
+      signals.length ===
+        0
     ) {
       container.innerHTML =
-        "<p>هنوز سیگنالی منتشر نشده است.</p>";
+        "<p>No signals have been published yet.</p>";
 
       return;
     }
@@ -1289,14 +1639,15 @@ async function loadSignals() {
               <h3>
                 ${escapeHtml(
                   signal.title ||
-                  "XAUUSD Signal"
+                    "XAUUSD Signal"
                 )}
               </h3>
 
               <p>
                 ${escapeHtml(
                   signal.content ||
-                  ""
+                    signal.body ||
+                    ""
                 )}
               </p>
 
@@ -1312,13 +1663,38 @@ async function loadSignals() {
     );
 
     container.innerHTML =
-      "<p>سیگنال‌ها فعلاً قابل دریافت نیستند.</p>";
+      "<p>Signals are currently unavailable.</p>";
   }
 }
 
-/* =========================
+/* =========================================================
+   STATUS
+========================================================= */
+
+function updateMemberStatus(
+  user
+) {
+  const status =
+    $("status");
+
+  if (!status) {
+    return;
+  }
+
+  if (
+    user?.approved
+  ) {
+    status.textContent =
+      "Membership approved. AI chart analysis is available.";
+  } else {
+    status.textContent =
+      "Your account is active, but membership approval is still pending.";
+  }
+}
+
+/* =========================================================
    MAIN LOAD
-========================= */
+========================================================= */
 
 async function load() {
   try {
@@ -1328,21 +1704,18 @@ async function load() {
       );
 
     currentUser =
-      data.user || null;
+      data.user ||
+      null;
 
-    const authSection =
-      $("authSection");
+    const auth =
+      $("auth");
 
     const dashboard =
       $("dashboard");
 
-    /*
-      کاربر وارد نشده
-    */
-
     if (!currentUser) {
-      if (authSection) {
-        authSection.style.display =
+      if (auth) {
+        auth.style.display =
           "";
       }
 
@@ -1354,12 +1727,8 @@ async function load() {
       return;
     }
 
-    /*
-      کاربر وارد شده
-    */
-
-    if (authSection) {
-      authSection.style.display =
+    if (auth) {
+      auth.style.display =
         "none";
     }
 
@@ -1368,47 +1737,18 @@ async function load() {
         "block";
     }
 
-    /*
-      نمایش نام کاربر
-    */
-
-    const nameElements = [
-      "userName",
-      "welcomeName",
-      "profileName"
-    ];
-
-    nameElements.forEach(
-      (id) => {
-        const el = $(id);
-
-        if (
-          el &&
-          currentUser.name
-        ) {
-          el.textContent =
-            currentUser.name;
-        }
-      }
+    updateMemberStatus(
+      currentUser
     );
 
-    /*
-      وضعیت پرداخت
-    */
-
     const status =
-      currentUser.payment_status ||
-      currentUser.paymentStatus ||
-      currentUser.status ||
-      "";
+      currentUser.approved
+        ? "approved"
+        : "pending";
 
     const approved =
       status ===
-        "approved" ||
-      currentUser.approved ===
-        true ||
-      currentUser.isApproved ===
-        true;
+      "approved";
 
     const aiPanel =
       $("aiPanel");
@@ -1419,8 +1759,10 @@ async function load() {
     const signalsPanel =
       $("signalsPanel");
 
-    if (approved) {
+    const payPanel =
+      $("payPanel");
 
+    if (approved) {
       if (aiPanel) {
         aiPanel.style.display =
           "block";
@@ -1436,13 +1778,17 @@ async function load() {
           "block";
       }
 
+      if (payPanel) {
+        payPanel.style.display =
+          "none";
+      }
+
       await Promise.all([
         loadHistory(),
         loadSignals()
       ]);
 
     } else {
-
       if (aiPanel) {
         aiPanel.style.display =
           "none";
@@ -1453,6 +1799,15 @@ async function load() {
           "none";
       }
 
+      if (signalsPanel) {
+        signalsPanel.style.display =
+          "none";
+      }
+
+      if (payPanel) {
+        payPanel.style.display =
+          "block";
+      }
     }
 
   } catch (error) {
@@ -1463,17 +1818,78 @@ async function load() {
   }
 }
 
-/* =========================
+/* =========================================================
+   AUTH TABS
+========================================================= */
+
+function setupAuthTabs() {
+  const tabs =
+    document.querySelectorAll(
+      ".tab"
+    );
+
+  tabs.forEach(
+    (tab) => {
+      tab.addEventListener(
+        "click",
+        () => {
+          const target =
+            tab.dataset.tab;
+
+          tabs.forEach(
+            (item) => {
+              item.classList.remove(
+                "active"
+              );
+            }
+          );
+
+          tab.classList.add(
+            "active"
+          );
+
+          if (
+            target ===
+            "login"
+          ) {
+            $("loginForm")
+              ?.classList.remove(
+                "hidden"
+              );
+
+            $("registerForm")
+              ?.classList.add(
+                "hidden"
+              );
+          } else {
+            $("loginForm")
+              ?.classList.add(
+                "hidden"
+              );
+
+            $("registerForm")
+              ?.classList.remove(
+                "hidden"
+              );
+          }
+
+          showMessage(
+            "authMsg",
+            ""
+          );
+        }
+      );
+    }
+  );
+}
+
+/* =========================================================
    EVENT LISTENERS
-========================= */
+========================================================= */
 
 document.addEventListener(
   "DOMContentLoaded",
   () => {
-
-    /*
-      Register
-    */
 
     const registerForm =
       $("registerForm");
@@ -1485,10 +1901,6 @@ document.addEventListener(
       );
     }
 
-    /*
-      Login
-    */
-
     const loginForm =
       $("loginForm");
 
@@ -1499,12 +1911,8 @@ document.addEventListener(
       );
     }
 
-    /*
-      Logout
-    */
-
     const logoutBtn =
-      $("logoutBtn");
+      $("logout");
 
     if (logoutBtn) {
       logoutBtn.addEventListener(
@@ -1512,10 +1920,6 @@ document.addEventListener(
         logoutUser
       );
     }
-
-    /*
-      Payment
-    */
 
     const paymentForm =
       $("paymentForm");
@@ -1527,23 +1931,15 @@ document.addEventListener(
       );
     }
 
-    /*
-      Support
-    */
+    const supportBtn =
+      $("supportBtn");
 
-    const supportForm =
-      $("supportForm");
-
-    if (supportForm) {
-      supportForm.addEventListener(
-        "submit",
+    if (supportBtn) {
+      supportBtn.addEventListener(
+        "click",
         sendSupport
       );
     }
-
-    /*
-      Chart file
-    */
 
     const chartFile =
       $("chartFile");
@@ -1555,10 +1951,6 @@ document.addEventListener(
       );
     }
 
-    /*
-      AI Chart Analysis
-    */
-
     const chartForm =
       $("chartForm");
 
@@ -1569,9 +1961,9 @@ document.addEventListener(
       );
     }
 
-    /*
-      Start
-    */
+    setupAuthTabs();
+    setupTimeframes();
+    setupPaymentMethods();
 
     load();
   }
