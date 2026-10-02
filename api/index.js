@@ -9,10 +9,24 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 /* =========================
-   NEON DATABASE
+   CONFIG
 ========================= */
 
 const DATABASE_URL = process.env.DATABASE_URL;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || "goldai-change-this-secret";
+
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD || "change-admin-password";
+
+const AI_MODEL =
+  process.env.OPENAI_MODEL || "gpt-6-luna";
+
+/* =========================
+   NEON DATABASE
+========================= */
 
 if (!DATABASE_URL) {
   console.error("DATABASE_URL is missing.");
@@ -79,6 +93,27 @@ async function initDatabase() {
       `;
 
       await sql`
+        CREATE TABLE IF NOT EXISTS analyses (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          symbol TEXT NOT NULL,
+          timeframe TEXT,
+          direction TEXT NOT NULL,
+          entry TEXT,
+          tp1 TEXT,
+          tp2 TEXT,
+          tp3 TEXT,
+          tp4 TEXT,
+          tp5 TEXT,
+          sl TEXT,
+          confidence TEXT,
+          analysis TEXT,
+          warning TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
         CREATE INDEX IF NOT EXISTS payments_user_id_idx
         ON payments(user_id)
       `;
@@ -86,6 +121,11 @@ async function initDatabase() {
       await sql`
         CREATE INDEX IF NOT EXISTS support_user_id_idx
         ON support(user_id)
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS analyses_user_id_idx
+        ON analyses(user_id)
       `;
 
       dbReady = true;
@@ -123,12 +163,6 @@ function createId() {
   return crypto.randomUUID();
 }
 
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || "goldai-change-this-secret";
-
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD || "change-admin-password";
-
 function hashPassword(password, salt) {
   const realSalt =
     salt || crypto.randomBytes(16).toString("hex");
@@ -157,6 +191,10 @@ function checkPassword(password, stored) {
     return false;
   }
 }
+
+/* =========================
+   SESSION
+========================= */
 
 function createToken(userId, role) {
   const payload = Buffer.from(
@@ -234,7 +272,7 @@ function setSessionCookie(res, token) {
 }
 
 /* =========================
-   USER HELPERS
+   FORMATTERS
 ========================= */
 
 function formatUser(row) {
@@ -322,9 +360,11 @@ function requireAdmin(req, res, next) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
+
   limits: {
     fileSize: 5 * 1024 * 1024
   },
+
   fileFilter: (req, file, cb) => {
     const allowed =
       /^image\/(png|jpe?g|webp|gif)$/i.test(
@@ -339,40 +379,32 @@ const upload = multer({
    HEALTH
 ========================= */
 
-app.get("/", (req, res) => {
-  res.json({
+function healthResponse() {
+  return {
     ok: true,
     service: "GoldAI API",
     status: "online",
-    database: "neon"
-  });
+    database: "neon",
+    ai: OPENAI_API_KEY
+      ? "configured"
+      : "not-configured"
+  };
+}
+
+app.get("/", (req, res) => {
+  res.json(healthResponse());
 });
 
 app.get("/api", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: "neon"
-  });
+  res.json(healthResponse());
 });
 
 app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: "neon"
-  });
+  res.json(healthResponse());
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: "neon"
-  });
+  res.json(healthResponse());
 });
 
 /* =========================
@@ -601,9 +633,7 @@ app.post(
       const method = req.body.method;
 
       if (
-        !["hesabpay", "binance"].includes(
-          method
-        )
+        !["hesabpay", "binance"].includes(method)
       ) {
         return res.status(400).json({
           error: "Invalid payment method."
@@ -612,15 +642,13 @@ app.post(
 
       if (!req.body.reference) {
         return res.status(400).json({
-          error:
-            "Payment reference is required."
+          error: "Payment reference is required."
         });
       }
 
       if (!req.file) {
         return res.status(400).json({
-          error:
-            "Receipt image is required."
+          error: "Receipt image is required."
         });
       }
 
@@ -721,10 +749,8 @@ app.get(
 
       res.json({
         approved,
-
         paymentStatus:
           latest?.status || "none",
-
         signals
       });
 
@@ -788,6 +814,363 @@ app.post(
 );
 
 /* =========================
+   AI CHART ANALYSIS
+========================= */
+
+app.post(
+  "/api/analyze-chart",
+  requireUser,
+  upload.single("chart"),
+  async (req, res) => {
+    try {
+      if (!req.user.approved) {
+        return res.status(403).json({
+          error:
+            "Your account must be approved before using AI chart analysis."
+        });
+      }
+
+      if (!OPENAI_API_KEY) {
+        return res.status(500).json({
+          error:
+            "AI service is not configured."
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          error: "Please upload a chart image."
+        });
+      }
+
+      const imageBase64 =
+        req.file.buffer.toString("base64");
+
+      const imageDataUrl =
+        `data:${req.file.mimetype};base64,${imageBase64}`;
+
+      const prompt = `
+You are GoldAI, an XAUUSD chart-analysis assistant.
+
+Analyze the uploaded trading chart image carefully.
+
+PRIMARY OBJECTIVE:
+Give a structured technical analysis of the visible XAUUSD chart.
+
+IMPORTANT:
+- Analyze only what is visible in the uploaded image.
+- Do not invent a current market price.
+- Do not claim certainty.
+- Do not guarantee profit.
+- Do not force a BUY or SELL.
+- If the chart is unclear, unreadable, not XAUUSD, or does not provide enough information, return WAIT.
+- If the chart shows enough information, determine BUY or SELL based on visible technical structure.
+- Identify the timeframe if visible.
+- Use visible price levels.
+- Consider trend, market structure, support, resistance, liquidity areas, candlestick behavior, breakouts/rejections and momentum when visible.
+- Entry can be a single price or a price zone.
+- TP levels must be technically reasonable relative to the visible structure.
+- SL should be beyond a relevant invalidation area when the chart provides enough information.
+- If a TP or SL cannot be reasonably determined from the image, return WAIT for that field.
+- Never fabricate numbers.
+
+RETURN ONLY VALID JSON.
+
+Use exactly this structure:
+
+{
+  "symbol": "XAUUSD",
+  "timeframe": "string",
+  "direction": "BUY | SELL | WAIT",
+  "entry": "string",
+  "tp1": "string",
+  "tp2": "string",
+  "tp3": "string",
+  "tp4": "string",
+  "tp5": "string",
+  "sl": "string",
+  "confidence": "Low | Medium | High",
+  "analysis": "string",
+  "warning": "string"
+}
+
+For WAIT:
+- direction must be WAIT
+- entry and TP/SL fields may be WAIT
+- clearly explain why a clear setup was not identified.
+
+Keep the analysis concise but useful.
+`;
+
+      const openaiResponse = await fetch(
+        "https://api.openai.com/v1/responses",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization":
+              `Bearer ${OPENAI_API_KEY}`
+          },
+
+          body: JSON.stringify({
+            model: AI_MODEL,
+
+            input: [
+              {
+                role: "user",
+
+                content: [
+                  {
+                    type: "input_text",
+                    text: prompt
+                  },
+
+                  {
+                    type: "input_image",
+                    image_url: imageDataUrl
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      );
+
+      const data =
+        await openaiResponse.json();
+
+      if (!openaiResponse.ok) {
+        console.error(
+          "OPENAI ERROR:",
+          JSON.stringify(data)
+        );
+
+        return res.status(502).json({
+          error:
+            "The AI service could not analyze this image."
+        });
+      }
+
+      const output =
+        String(data.output_text || "").trim();
+
+      if (!output) {
+        return res.status(502).json({
+          error:
+            "The AI returned an empty response."
+        });
+      }
+
+      let analysis;
+
+      try {
+        analysis = JSON.parse(output);
+      } catch {
+        const cleaned =
+          output
+            .replace(/^```json/i, "")
+            .replace(/^```/i, "")
+            .replace(/```$/i, "")
+            .trim();
+
+        try {
+          analysis = JSON.parse(cleaned);
+        } catch {
+          const match =
+            cleaned.match(/\{[\s\S]*\}/);
+
+          if (!match) {
+            console.error(
+              "INVALID AI OUTPUT:",
+              output
+            );
+
+            return res.status(502).json({
+              error:
+                "The AI returned an invalid analysis."
+            });
+          }
+
+          try {
+            analysis = JSON.parse(match[0]);
+          } catch {
+            return res.status(502).json({
+              error:
+                "The AI returned an invalid analysis."
+            });
+          }
+        }
+      }
+
+      const clean = value =>
+        value === undefined ||
+        value === null ||
+        String(value).trim() === ""
+          ? "WAIT"
+          : String(value).trim().slice(0, 2000);
+
+      const direction =
+        ["BUY", "SELL", "WAIT"].includes(
+          String(analysis.direction).toUpperCase()
+        )
+          ? String(analysis.direction).toUpperCase()
+          : "WAIT";
+
+      const result = {
+        symbol: "XAUUSD",
+
+        timeframe:
+          clean(analysis.timeframe),
+
+        direction,
+
+        entry:
+          clean(analysis.entry),
+
+        tp1:
+          clean(analysis.tp1),
+
+        tp2:
+          clean(analysis.tp2),
+
+        tp3:
+          clean(analysis.tp3),
+
+        tp4:
+          clean(analysis.tp4),
+
+        tp5:
+          clean(analysis.tp5),
+
+        sl:
+          clean(analysis.sl),
+
+        confidence:
+          ["Low", "Medium", "High"].includes(
+            analysis.confidence
+          )
+            ? analysis.confidence
+            : "Low",
+
+        analysis:
+          clean(analysis.analysis),
+
+        warning:
+          clean(
+            analysis.warning ||
+            "Trading involves market risk. This analysis does not guarantee profit."
+          )
+      };
+
+      await sql`
+        INSERT INTO analyses (
+          id,
+          user_id,
+          symbol,
+          timeframe,
+          direction,
+          entry,
+          tp1,
+          tp2,
+          tp3,
+          tp4,
+          tp5,
+          sl,
+          confidence,
+          analysis,
+          warning
+        )
+        VALUES (
+          ${createId()},
+          ${req.user.id},
+          ${result.symbol},
+          ${result.timeframe},
+          ${result.direction},
+          ${result.entry},
+          ${result.tp1},
+          ${result.tp2},
+          ${result.tp3},
+          ${result.tp4},
+          ${result.tp5},
+          ${result.sl},
+          ${result.confidence},
+          ${result.analysis},
+          ${result.warning}
+        )
+      `;
+
+      return res.json({
+        ok: true,
+        analysis: result
+      });
+
+    } catch (error) {
+      console.error(
+        "AI CHART ANALYSIS ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Could not analyze the chart."
+      });
+    }
+  }
+);
+
+/* =========================
+   USER ANALYSIS HISTORY
+========================= */
+
+app.get(
+  "/api/analyses",
+  requireUser,
+  async (req, res) => {
+    try {
+      const rows = await sql`
+        SELECT
+          id,
+          symbol,
+          timeframe,
+          direction,
+          entry,
+          tp1,
+          tp2,
+          tp3,
+          tp4,
+          tp5,
+          sl,
+          confidence,
+          analysis,
+          warning,
+          created_at AS "createdAt"
+        FROM analyses
+        WHERE user_id = ${req.user.id}
+        ORDER BY created_at DESC
+        LIMIT 20
+      `;
+
+      res.json({
+        ok: true,
+        analyses: rows
+      });
+
+    } catch (error) {
+      console.error(
+        "ANALYSIS HISTORY ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          "Could not load analysis history."
+      });
+    }
+  }
+);
+
+/* =========================
    ADMIN LOGIN
 ========================= */
 
@@ -795,13 +1178,9 @@ app.post(
   "/api/admin/login",
   (req, res) => {
     const password =
-      String(
-        req.body?.password || ""
-      );
+      String(req.body?.password || "");
 
-    if (
-      password !== ADMIN_PASSWORD
-    ) {
+    if (password !== ADMIN_PASSWORD) {
       return res.status(401).json({
         error:
           "Invalid admin password."
@@ -810,10 +1189,7 @@ app.post(
 
     setSessionCookie(
       res,
-      createToken(
-        "admin",
-        "admin"
-      )
+      createToken("admin", "admin")
     );
 
     res.json({
@@ -877,6 +1253,18 @@ app.get(
         ORDER BY s.created_at DESC
       `;
 
+      const analyses = await sql`
+        SELECT
+          a.*,
+          u.email AS user_email,
+          u.name AS user_name
+        FROM analyses a
+        LEFT JOIN users u
+          ON u.id = a.user_id
+        ORDER BY a.created_at DESC
+        LIMIT 100
+      `;
+
       res.json({
         users: users.map(formatUser),
 
@@ -897,6 +1285,29 @@ app.get(
           createdAt: s.created_at,
           userEmail:
             s.user_email || "Unknown"
+        })),
+
+        analyses: analyses.map(a => ({
+          id: a.id,
+          userId: a.user_id,
+          userEmail:
+            a.user_email || "Unknown",
+          userName:
+            a.user_name || "Unknown",
+          symbol: a.symbol,
+          timeframe: a.timeframe,
+          direction: a.direction,
+          entry: a.entry,
+          tp1: a.tp1,
+          tp2: a.tp2,
+          tp3: a.tp3,
+          tp4: a.tp4,
+          tp5: a.tp5,
+          sl: a.sl,
+          confidence: a.confidence,
+          analysis: a.analysis,
+          warning: a.warning,
+          createdAt: a.created_at
         }))
       });
 
@@ -907,7 +1318,8 @@ app.get(
       );
 
       res.status(500).json({
-        error: "Could not load admin data."
+        error:
+          "Could not load admin data."
       });
     }
   }
@@ -1015,7 +1427,8 @@ app.post(
       );
 
       res.status(500).json({
-        error: "Could not approve payment."
+        error:
+          "Could not approve payment."
       });
     }
   }
@@ -1070,7 +1483,8 @@ app.post(
       );
 
       res.status(500).json({
-        error: "Could not reject payment."
+        error:
+          "Could not reject payment."
       });
     }
   }
@@ -1123,7 +1537,8 @@ app.post(
       );
 
       res.status(500).json({
-        error: "Could not create signal."
+        error:
+          "Could not create signal."
       });
     }
   }
@@ -1154,7 +1569,8 @@ app.delete(
       );
 
       res.status(500).json({
-        error: "Could not delete signal."
+        error:
+          "Could not delete signal."
       });
     }
   }
