@@ -5,12 +5,8 @@ const { neon } = require("@neondatabase/serverless");
 
 const app = express();
 
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-/* =========================
-   CONFIG
-========================= */
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -24,81 +20,74 @@ const ADMIN_PASSWORD =
 const AI_MODEL =
   process.env.OPENAI_MODEL || "gpt-6-luna";
 
-/* =========================
-   NEON DATABASE
-========================= */
-
-if (!DATABASE_URL) {
-  console.error("DATABASE_URL is missing.");
-}
-
 const sql = DATABASE_URL ? neon(DATABASE_URL) : null;
 
-let dbReady = false;
-let dbInitPromise = null;
+/* =========================================================
+   DATABASE
+========================================================= */
 
-async function initDatabase() {
+let dbReadyPromise = null;
+
+async function ensureDatabase() {
   if (!sql) {
     throw new Error("DATABASE_URL is not configured.");
   }
 
-  if (dbReady) return;
-
-  if (!dbInitPromise) {
-    dbInitPromise = (async () => {
+  if (!dbReadyPromise) {
+    dbReadyPromise = (async () => {
       await sql`
         CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
+          id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL,
           password_salt TEXT NOT NULL,
           password_hash TEXT NOT NULL,
-          approved BOOLEAN NOT NULL DEFAULT FALSE,
-          email_verified BOOLEAN NOT NULL DEFAULT FALSE,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          approved BOOLEAN DEFAULT FALSE,
+          email_verified BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW()
         )
       `;
 
       await sql`
         CREATE TABLE IF NOT EXISTS payments (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
           method TEXT NOT NULL,
-          amount TEXT NOT NULL,
-          reference TEXT NOT NULL,
-          receipt_data BYTEA,
+          amount NUMERIC,
+          reference TEXT,
+          receipt_data TEXT,
           receipt_mime TEXT,
-          status TEXT NOT NULL DEFAULT 'pending',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          reviewed_at TIMESTAMPTZ
+          status TEXT DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT NOW(),
+          reviewed_at TIMESTAMP
         )
       `;
 
       await sql`
         CREATE TABLE IF NOT EXISTS signals (
-          id TEXT PRIMARY KEY,
+          id SERIAL PRIMARY KEY,
           title TEXT NOT NULL,
           body TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          created_at TIMESTAMP DEFAULT NOW()
         )
       `;
 
       await sql`
         CREATE TABLE IF NOT EXISTS support (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
           message TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          created_at TIMESTAMP DEFAULT NOW()
         )
       `;
 
       await sql`
         CREATE TABLE IF NOT EXISTS analyses (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          symbol TEXT NOT NULL,
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          symbol TEXT,
           timeframe TEXT,
-          direction TEXT NOT NULL,
+          direction TEXT,
           entry TEXT,
           tp1 TEXT,
           tp2 TEXT,
@@ -109,214 +98,228 @@ async function initDatabase() {
           confidence TEXT,
           analysis TEXT,
           warning TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          created_at TIMESTAMP DEFAULT NOW()
         )
       `;
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS payments_user_id_idx
-        ON payments(user_id)
-      `;
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS support_user_id_idx
-        ON support(user_id)
-      `;
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS analyses_user_id_idx
-        ON analyses(user_id)
-      `;
-
-      dbReady = true;
-    })().catch(error => {
-      dbInitPromise = null;
-      throw error;
-    });
+    })();
   }
 
-  await dbInitPromise;
+  return dbReadyPromise;
 }
-
-/* =========================
-   DATABASE MIDDLEWARE
-========================= */
 
 app.use(async (req, res, next) => {
   try {
-    await initDatabase();
+    await ensureDatabase();
     next();
   } catch (error) {
-    console.error("DATABASE INIT ERROR:", error);
-
+    console.error("DATABASE ERROR:", error);
     res.status(500).json({
       error: "Database connection failed."
     });
   }
 });
 
-/* =========================
-   HELPERS
-========================= */
+/* =========================================================
+   PASSWORD
+========================================================= */
 
-function createId() {
-  return crypto.randomUUID();
-}
-
-function hashPassword(password, salt) {
-  const realSalt =
-    salt || crypto.randomBytes(16).toString("hex");
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
 
   const hash = crypto
-    .scryptSync(password, realSalt, 64)
+    .scryptSync(password, salt, 64)
     .toString("hex");
 
   return {
-    salt: realSalt,
+    salt,
     hash
   };
 }
 
 function checkPassword(password, stored) {
   try {
-    const hash = crypto
-      .scryptSync(password, stored.salt, 64)
-      .toString("hex");
-
-    return crypto.timingSafeEqual(
-      Buffer.from(hash, "hex"),
-      Buffer.from(stored.hash, "hex")
+    const calculated = crypto.scryptSync(
+      password,
+      stored.salt,
+      64
     );
+
+    const original = Buffer.from(stored.hash, "hex");
+
+    if (calculated.length !== original.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(calculated, original);
   } catch {
     return false;
   }
 }
 
-/* =========================
+/* =========================================================
    SESSION
-========================= */
+========================================================= */
 
-function createToken(userId, role) {
-  const payload = Buffer.from(
-    JSON.stringify({
-      userId,
-      role,
-      exp: Date.now() + 1000 * 60 * 60 * 24 * 7
-    })
-  ).toString("base64url");
+function createToken(userId, role = "user") {
+  const payload = {
+    userId,
+    role,
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+  };
+
+  const encoded = Buffer
+    .from(JSON.stringify(payload))
+    .toString("base64url");
 
   const signature = crypto
     .createHmac("sha256", SESSION_SECRET)
-    .update(payload)
+    .update(encoded)
     .digest("base64url");
 
-  return `${payload}.${signature}`;
+  return `${encoded}.${signature}`;
 }
 
 function getCookieToken(req) {
   const cookieHeader = req.headers.cookie || "";
 
-  const cookie = cookieHeader
-    .split(";")
-    .map(x => x.trim())
-    .find(x => x.startsWith("goldai_session="));
+  const cookies = {};
 
-  if (!cookie) return null;
+  cookieHeader.split(";").forEach((part) => {
+    const index = part.indexOf("=");
 
-  return decodeURIComponent(
-    cookie.substring("goldai_session=".length)
-  );
+    if (index === -1) return;
+
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+
+    cookies[key] = value;
+  });
+
+  if (!cookies.goldai_session) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(cookies.goldai_session);
+  } catch {
+    return cookies.goldai_session;
+  }
 }
 
 function getSession(req) {
-  const token = getCookieToken(req);
-
-  if (!token) return null;
-
-  const parts = token.split(".");
-
-  if (parts.length !== 2) return null;
-
-  const payload = parts[0];
-  const signature = parts[1];
-
-  const expected = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  if (signature !== expected) return null;
-
   try {
-    const data = JSON.parse(
-      Buffer.from(payload, "base64url").toString()
-    );
+    const token = getCookieToken(req);
 
-    if (!data.exp || data.exp < Date.now()) {
+    if (!token) {
       return null;
     }
 
-    return data;
-  } catch {
+    const parts = token.split(".");
+
+    if (parts.length !== 2) {
+      return null;
+    }
+
+    const encoded = parts[0];
+    const providedSignature = parts[1];
+
+    const expectedSignature = crypto
+      .createHmac("sha256", SESSION_SECRET)
+      .update(encoded)
+      .digest("base64url");
+
+    const providedBuffer = Buffer.from(
+      providedSignature
+    );
+
+    const expectedBuffer = Buffer.from(
+      expectedSignature
+    );
+
+    if (
+      providedBuffer.length !== expectedBuffer.length ||
+      !crypto.timingSafeEqual(
+        providedBuffer,
+        expectedBuffer
+      )
+    ) {
+      return null;
+    }
+
+    const payload = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8")
+    );
+
+    if (!payload.exp || Date.now() > payload.exp) {
+      return null;
+    }
+
+    return payload;
+  } catch (error) {
+    console.error("SESSION ERROR:", error);
     return null;
   }
 }
 
-function setSessionCookie(res, token) {
+function setSessionCookie(req, res, token) {
+  const forwardedProto =
+    req.headers["x-forwarded-proto"] || "";
+
+  const secure =
+    forwardedProto === "https"
+      ? "; Secure"
+      : "";
+
   res.setHeader(
     "Set-Cookie",
     `goldai_session=${encodeURIComponent(
       token
-    )}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800`
+    )}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`
   );
 }
 
-/* =========================
-   FORMATTERS
-========================= */
+function clearSessionCookie(req, res) {
+  const forwardedProto =
+    req.headers["x-forwarded-proto"] || "";
+
+  const secure =
+    forwardedProto === "https"
+      ? "; Secure"
+      : "";
+
+  res.setHeader(
+    "Set-Cookie",
+    `goldai_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`
+  );
+}
+
+/* =========================================================
+   USER
+========================================================= */
 
 function formatUser(row) {
+  if (!row) return null;
+
   return {
     id: row.id,
     name: row.name,
     email: row.email,
-    approved: row.approved,
-    emailVerified: row.email_verified,
+    approved: Boolean(row.approved),
+    emailVerified: Boolean(row.email_verified),
     createdAt: row.created_at
   };
 }
 
-function formatPayment(row) {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    method: row.method,
-    amount: row.amount,
-    reference: row.reference,
-    receipt:
-      row.receipt_data
-        ? `/api/admin/receipts/${row.id}`
-        : null,
-    status: row.status,
-    createdAt: row.created_at,
-    reviewedAt: row.reviewed_at
-  };
-}
-
-/* =========================
-   AUTH MIDDLEWARE
-========================= */
-
 async function requireUser(req, res, next) {
-  const session = getSession(req);
-
-  if (!session || session.role !== "user") {
-    return res.status(401).json({
-      error: "LOGIN_REQUIRED"
-    });
-  }
-
   try {
+    const session = getSession(req);
+
+    if (!session || session.role !== "user") {
+      return res.status(401).json({
+        error: "Not authenticated."
+      });
+    }
+
     const rows = await sql`
       SELECT *
       FROM users
@@ -326,7 +329,7 @@ async function requireUser(req, res, next) {
 
     if (!rows.length) {
       return res.status(401).json({
-        error: "LOGIN_REQUIRED"
+        error: "User not found."
       });
     }
 
@@ -336,7 +339,7 @@ async function requireUser(req, res, next) {
   } catch (error) {
     console.error("AUTH ERROR:", error);
 
-    return res.status(500).json({
+    res.status(500).json({
       error: "Authentication failed."
     });
   }
@@ -347,16 +350,16 @@ function requireAdmin(req, res, next) {
 
   if (!session || session.role !== "admin") {
     return res.status(401).json({
-      error: "ADMIN_REQUIRED"
+      error: "Admin authentication required."
     });
   }
 
   next();
 }
 
-/* =========================
+/* =========================================================
    UPLOAD
-========================= */
+========================================================= */
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -366,12 +369,14 @@ const upload = multer({
   },
 
   fileFilter: (req, file, cb) => {
-    const allowed =
-      /^image\/(png|jpe?g|webp|gif)$/i.test(
-        file.mimetype
-      );
+    const allowed = [
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif"
+    ];
 
-    if (!allowed) {
+    if (!allowed.includes(file.mimetype)) {
       return cb(
         new Error(
           "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
@@ -383,41 +388,48 @@ const upload = multer({
   }
 });
 
-/* =========================
+/* =========================================================
    HEALTH
-========================= */
-
-function healthResponse() {
-  return {
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: "neon",
-    ai: OPENAI_API_KEY
-      ? "configured"
-      : "not-configured"
-  };
-}
+========================================================= */
 
 app.get("/", (req, res) => {
-  res.json(healthResponse());
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online"
+  });
 });
 
 app.get("/api", (req, res) => {
-  res.json(healthResponse());
-});
-
-app.get("/health", (req, res) => {
-  res.json(healthResponse());
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online",
+    database: DATABASE_URL ? "neon" : "missing",
+    ai: OPENAI_API_KEY ? "configured" : "missing"
+  });
 });
 
 app.get("/api/health", (req, res) => {
-  res.json(healthResponse());
+  res.json({
+    ok: true,
+    service: "GoldAI API",
+    status: "online",
+    database: DATABASE_URL ? "neon" : "missing",
+    ai: OPENAI_API_KEY ? "configured" : "missing"
+  });
 });
 
-/* =========================
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    status: "online"
+  });
+});
+
+/* =========================================================
    REGISTER
-========================= */
+========================================================= */
 
 app.post("/api/register", async (req, res) => {
   try {
@@ -427,20 +439,28 @@ app.post("/api/register", async (req, res) => {
       password
     } = req.body || {};
 
-    if (!name || !email || !password) {
+    const cleanName =
+      String(name || "").trim();
+
+    const cleanEmail =
+      String(email || "")
+        .trim()
+        .toLowerCase();
+
+    const cleanPassword =
+      String(password || "");
+
+    if (!cleanName || !cleanEmail || !cleanPassword) {
       return res.status(400).json({
         error: "Name, email and password are required."
       });
     }
 
-    if (String(password).length < 6) {
+    if (cleanPassword.length < 6) {
       return res.status(400).json({
         error: "Password must be at least 6 characters."
       });
     }
-
-    const cleanEmail =
-      String(email).trim().toLowerCase();
 
     const existing = await sql`
       SELECT id
@@ -451,20 +471,15 @@ app.post("/api/register", async (req, res) => {
 
     if (existing.length) {
       return res.status(409).json({
-        error:
-          "An account with this email already exists."
+        error: "An account with this email already exists."
       });
     }
 
-    const passwordData = hashPassword(
-      String(password)
-    );
-
-    const userId = createId();
+    const passwordData =
+      hashPassword(cleanPassword);
 
     const rows = await sql`
       INSERT INTO users (
-        id,
         name,
         email,
         password_salt,
@@ -473,8 +488,7 @@ app.post("/api/register", async (req, res) => {
         email_verified
       )
       VALUES (
-        ${userId},
-        ${String(name).trim().slice(0, 80)},
+        ${cleanName},
         ${cleanEmail},
         ${passwordData.salt},
         ${passwordData.hash},
@@ -487,15 +501,21 @@ app.post("/api/register", async (req, res) => {
     const user = rows[0];
 
     setSessionCookie(
+      req,
       res,
       createToken(user.id, "user")
     );
 
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
     return res.json({
       ok: true,
+      loggedIn: true,
       user: formatUser(user)
     });
-
   } catch (error) {
     console.error("REGISTER ERROR:", error);
 
@@ -505,9 +525,9 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-/* =========================
+/* =========================================================
    LOGIN
-========================= */
+========================================================= */
 
 app.post("/api/login", async (req, res) => {
   try {
@@ -521,6 +541,15 @@ app.post("/api/login", async (req, res) => {
         .trim()
         .toLowerCase();
 
+    const cleanPassword =
+      String(password || "");
+
+    if (!cleanEmail || !cleanPassword) {
+      return res.status(400).json({
+        error: "Email and password are required."
+      });
+    }
+
     const rows = await sql`
       SELECT *
       FROM users
@@ -532,29 +561,35 @@ app.post("/api/login", async (req, res) => {
 
     if (
       !user ||
-      !checkPassword(
-        String(password || ""),
-        {
-          salt: user.password_salt,
-          hash: user.password_hash
-        }
-      )
+      !checkPassword(cleanPassword, {
+        salt: user.password_salt,
+        hash: user.password_hash
+      })
     ) {
       return res.status(401).json({
         error: "Invalid email or password."
       });
     }
 
+    const token =
+      createToken(user.id, "user");
+
     setSessionCookie(
+      req,
       res,
-      createToken(user.id, "user")
+      token
+    );
+
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
     );
 
     return res.json({
       ok: true,
+      loggedIn: true,
       user: formatUser(user)
     });
-
   } catch (error) {
     console.error("LOGIN ERROR:", error);
 
@@ -564,28 +599,37 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-/* =========================
+/* =========================================================
    LOGOUT
-========================= */
+========================================================= */
 
 app.post("/api/logout", (req, res) => {
+  clearSessionCookie(req, res);
+
   res.setHeader(
-    "Set-Cookie",
-    "goldai_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"
+    "Cache-Control",
+    "no-store"
   );
 
-  res.json({
-    ok: true
+  return res.json({
+    ok: true,
+    loggedIn: false
   });
 });
 
-/* =========================
+/* =========================================================
    CURRENT USER
-========================= */
+========================================================= */
 
 app.get("/api/me", async (req, res) => {
   try {
-    const session = getSession(req);
+    res.setHeader(
+      "Cache-Control",
+      "no-store"
+    );
+
+    const session =
+      getSession(req);
 
     if (!session) {
       return res.json({
@@ -608,6 +652,8 @@ app.get("/api/me", async (req, res) => {
     `;
 
     if (!rows.length) {
+      clearSessionCookie(req, res);
+
       return res.json({
         loggedIn: false
       });
@@ -618,111 +664,110 @@ app.get("/api/me", async (req, res) => {
       role: "user",
       user: formatUser(rows[0])
     });
-
   } catch (error) {
     console.error("ME ERROR:", error);
 
-    res.status(500).json({
-      error: "Could not load user."
+    return res.status(500).json({
+      error: "Could not load session."
     });
   }
 });
 
-/* =========================
-   PAYMENTS
-========================= */
+/* =========================================================
+   PAYMENT
+========================================================= */
 
+async function handlePayment(req, res) {
+  try {
+    const {
+      method,
+      amount,
+      reference
+    } = req.body || {};
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: "Receipt image is required."
+      });
+    }
+
+    const cleanMethod =
+      String(method || "")
+        .trim()
+        .toLowerCase();
+
+    if (
+      cleanMethod !== "hesabpay" &&
+      cleanMethod !== "binance"
+    ) {
+      return res.status(400).json({
+        error: "Invalid payment method."
+      });
+    }
+
+    const receiptData =
+      req.file.buffer.toString("base64");
+
+    const rows = await sql`
+      INSERT INTO payments (
+        user_id,
+        method,
+        amount,
+        reference,
+        receipt_data,
+        receipt_mime,
+        status
+      )
+      VALUES (
+        ${req.user.id},
+        ${cleanMethod},
+        ${String(amount || "")},
+        ${String(reference || "")},
+        ${receiptData},
+        ${req.file.mimetype},
+        'pending'
+      )
+      RETURNING
+        id,
+        user_id,
+        method,
+        amount,
+        reference,
+        status,
+        created_at
+    `;
+
+    return res.json({
+      ok: true,
+      payment: rows[0]
+    });
+  } catch (error) {
+    console.error("PAYMENT ERROR:", error);
+
+    return res.status(500).json({
+      error: "Payment submission failed."
+    });
+  }
+}
+
+/* Both routes are supported */
 app.post(
   "/api/payments",
   requireUser,
   upload.single("receipt"),
-  async (req, res) => {
-    try {
-      const method = req.body.method;
-
-      if (
-        !["hesabpay", "binance"].includes(method)
-      ) {
-        return res.status(400).json({
-          error: "Invalid payment method."
-        });
-      }
-
-      if (!req.body.reference) {
-        return res.status(400).json({
-          error: "Payment reference is required."
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({
-          error: "Receipt image is required."
-        });
-      }
-
-      const pending = await sql`
-        SELECT id
-        FROM payments
-        WHERE user_id = ${req.user.id}
-          AND status = 'pending'
-        LIMIT 1
-      `;
-
-      if (pending.length) {
-        return res.status(409).json({
-          error:
-            "You already have a payment waiting for review."
-        });
-      }
-
-      const paymentId = createId();
-
-      await sql`
-        INSERT INTO payments (
-          id,
-          user_id,
-          method,
-          amount,
-          reference,
-          receipt_data,
-          receipt_mime,
-          status
-        )
-        VALUES (
-          ${paymentId},
-          ${req.user.id},
-          ${method},
-          ${
-            method === "hesabpay"
-              ? "240 AFN"
-              : "4 USD / USDT"
-          },
-          ${String(req.body.reference)
-            .trim()
-            .slice(0, 120)},
-          ${req.file.buffer},
-          ${req.file.mimetype},
-          'pending'
-        )
-      `;
-
-      res.json({
-        ok: true
-      });
-
-    } catch (error) {
-      console.error("PAYMENT ERROR:", error);
-
-      res.status(500).json({
-        error: "Payment submission failed."
-      });
-    }
-  }
+  handlePayment
 );
 
-/* =========================
-   USER ACCESS
-========================= */
+app.post(
+  "/api/payment",
+  requireUser,
+  upload.single("receipt"),
+  handlePayment
+);
+
+/* =========================================================
+   ACCESS
+========================================================= */
 
 app.get(
   "/api/access",
@@ -734,96 +779,174 @@ app.get(
         FROM payments
         WHERE user_id = ${req.user.id}
         ORDER BY created_at DESC
+        LIMIT 20
       `;
 
-      const latest = payments[0];
+      const signals = await sql`
+        SELECT id, title, body, created_at
+        FROM signals
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
 
-      const approved =
-        req.user.approved === true;
-
-      let signals = [];
-
-      if (approved) {
-        signals = await sql`
-          SELECT
-            id,
-            title,
-            body,
-            created_at AS "createdAt"
-          FROM signals
-          ORDER BY created_at DESC
-        `;
-      }
-
-      res.json({
-        approved,
+      return res.json({
+        ok: true,
+        approved: Boolean(req.user.approved),
         paymentStatus:
-          latest?.status || "none",
+          payments[0]?.status || null,
+        payments,
         signals
       });
-
     } catch (error) {
       console.error("ACCESS ERROR:", error);
 
-      res.status(500).json({
-        error: "Could not load access."
+      return res.status(500).json({
+        error: "Could not load access information."
       });
     }
   }
 );
 
-/* =========================
+/* =========================================================
    SUPPORT
-========================= */
+========================================================= */
 
 app.post(
   "/api/support",
   requireUser,
   async (req, res) => {
     try {
-      const message = req.body?.message;
+      const message =
+        String(
+          req.body?.message || ""
+        ).trim();
 
-      if (
-        !message ||
-        String(message).trim().length < 2
-      ) {
+      if (!message) {
         return res.status(400).json({
-          error: "Message required."
+          error: "Message is required."
         });
       }
 
-      await sql`
+      const rows = await sql`
         INSERT INTO support (
-          id,
           user_id,
           message
         )
         VALUES (
-          ${createId()},
           ${req.user.id},
-          ${String(message)
-            .trim()
-            .slice(0, 2000)}
+          ${message}
         )
+        RETURNING *
       `;
 
-      res.json({
-        ok: true
+      return res.json({
+        ok: true,
+        support: rows[0]
       });
-
     } catch (error) {
       console.error("SUPPORT ERROR:", error);
 
-      res.status(500).json({
-        error: "Could not send support message."
+      return res.status(500).json({
+        error: "Support message failed."
       });
     }
   }
 );
 
-/* =========================
+/* =========================================================
    AI CHART ANALYSIS
-========================= */
+========================================================= */
+
+function cleanJsonText(text) {
+  let value = String(text || "").trim();
+
+  if (value.startsWith("```")) {
+    value = value
+      .replace(/^```(?:json)?/i, "")
+      .replace(/```$/i, "")
+      .trim();
+  }
+
+  return value;
+}
+
+function normalizeDirection(value) {
+  const v =
+    String(value || "")
+      .trim()
+      .toUpperCase();
+
+  if (
+    v === "BUY" ||
+    v === "LONG" ||
+    v.includes("خرید")
+  ) {
+    return "BUY";
+  }
+
+  if (
+    v === "SELL" ||
+    v === "SHORT" ||
+    v.includes("فروش")
+  ) {
+    return "SELL";
+  }
+
+  return "WAIT";
+}
+
+function normalizeConfidence(value) {
+  const v =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  if (
+    v === "high" ||
+    v.includes("بالا")
+  ) {
+    return "High";
+  }
+
+  if (
+    v === "medium" ||
+    v.includes("متوسط")
+  ) {
+    return "Medium";
+  }
+
+  return "Low";
+}
+
+function extractResponseText(data) {
+  if (
+    data &&
+    typeof data.output_text === "string" &&
+    data.output_text.trim()
+  ) {
+    return data.output_text;
+  }
+
+  let result = "";
+
+  if (Array.isArray(data?.output)) {
+    for (const item of data.output) {
+      if (!Array.isArray(item.content)) {
+        continue;
+      }
+
+      for (const content of item.content) {
+        if (
+          typeof content?.text === "string"
+        ) {
+          result += content.text;
+        }
+      }
+    }
+  }
+
+  return result;
+}
 
 app.post(
   "/api/analyze-chart",
@@ -834,532 +957,234 @@ app.post(
       if (!req.user.approved) {
         return res.status(403).json({
           error:
-            "Your account must be approved before using AI chart analysis."
+            "Your account has not been approved yet."
         });
       }
 
       if (!OPENAI_API_KEY) {
         return res.status(500).json({
           error:
-            "AI service is not configured."
+            "OPENAI_API_KEY is not configured."
         });
       }
 
       if (!req.file) {
         return res.status(400).json({
           error:
-            "Please upload a chart image."
+            "Chart image is required."
         });
       }
 
-      const imageBase64 =
+      const base64 =
         req.file.buffer.toString("base64");
 
-      const imageDataUrl =
-        `data:${req.file.mimetype};base64,${imageBase64}`;
+      const imageUrl =
+        `data:${req.file.mimetype};base64,${base64}`;
 
       const prompt = `
-You are GoldAI, an XAUUSD chart-analysis assistant.
+You are GoldAI, an XAUUSD market chart analyzer.
 
-Analyze the uploaded trading chart image carefully.
+Analyze the uploaded XAUUSD chart carefully.
 
-Your job is to analyze ONLY what is visible in the uploaded image.
+Return ONLY valid JSON.
+Do not use markdown.
+Do not write anything before or after the JSON.
 
-IMPORTANT RULES:
-
-1. Do not invent prices.
-2. Do not invent a timeframe.
-3. Do not claim certainty.
-4. Do not guarantee profit.
-5. Do not force BUY or SELL.
-6. If the chart is unclear, return WAIT.
-7. If the chart is not clearly XAUUSD, return WAIT.
-8. Use only price levels that are visible or reasonably readable from the chart.
-9. Consider visible:
-   - market trend
-   - market structure
-   - support
-   - resistance
-   - liquidity
-   - candlestick behavior
-   - breakouts
-   - rejections
-   - momentum
-   - visible price zones
-10. Entry must be based on visible information.
-11. TP levels must be technically reasonable.
-12. SL must be based on a visible invalidation area when possible.
-13. If a reliable entry, TP or SL cannot be determined, use WAIT for that field.
-14. A WAIT decision is acceptable and preferred over fabricated information.
-15. Keep the analysis concise but useful.
-
-RETURN ONLY VALID JSON.
-
-Use exactly this structure:
+Required JSON structure:
 
 {
   "symbol": "XAUUSD",
-  "timeframe": "string",
-  "direction": "BUY | SELL | WAIT",
-  "entry": "string",
-  "tp1": "string",
-  "tp2": "string",
-  "tp3": "string",
-  "tp4": "string",
-  "tp5": "string",
-  "sl": "string",
-  "confidence": "Low | Medium | High",
-  "analysis": "string",
-  "warning": "string"
+  "timeframe": "15m",
+  "direction": "BUY",
+  "entry": "0000",
+  "tp1": "0000",
+  "tp2": "0000",
+  "tp3": "0000",
+  "tp4": "0000",
+  "tp5": "0000",
+  "sl": "0000",
+  "confidence": "Medium",
+  "analysis": "short explanation",
+  "warning": "risk warning"
 }
 
-If there is not enough information for a valid trade setup:
+Rules:
 
-{
-  "symbol": "XAUUSD",
-  "timeframe": "WAIT",
-  "direction": "WAIT",
-  "entry": "WAIT",
-  "tp1": "WAIT",
-  "tp2": "WAIT",
-  "tp3": "WAIT",
-  "tp4": "WAIT",
-  "tp5": "WAIT",
-  "sl": "WAIT",
-  "confidence": "Low",
-  "analysis": "The chart does not provide enough clear information for a reliable setup.",
-  "warning": "This is technical analysis only and does not guarantee profit."
-}
-
-Do not include Markdown.
-Do not include code fences.
-Return JSON only.
+- symbol must be XAUUSD.
+- direction must be exactly BUY, SELL, or WAIT.
+- timeframe must identify the visible chart timeframe if possible.
+- entry must contain a realistic price level or price zone.
+- tp1 through tp5 must be realistic price levels.
+- sl must be a realistic stop-loss level.
+- confidence must be exactly Low, Medium, or High.
+- If the chart does not provide enough evidence for a directional trade, use WAIT.
+- Do not invent indicators that are not visible.
+- Use the actual visible price levels from the chart.
+- Keep analysis concise.
+- Keep warning concise.
 `;
 
-      console.log(
-        "AI REQUEST:",
-        JSON.stringify({
-          model: AI_MODEL,
-          mime: req.file.mimetype,
-          size: req.file.size
-        })
-      );
+      const response =
+        await fetch(
+          "https://api.openai.com/v1/responses",
+          {
+            method: "POST",
 
-      const openaiResponse = await fetch(
-        "https://api.openai.com/v1/responses",
-        {
-          method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization":
-              `Bearer ${OPENAI_API_KEY}`
-          },
+              "Authorization":
+                `Bearer ${OPENAI_API_KEY}`
+            },
 
-          body: JSON.stringify({
-            model: AI_MODEL,
+            body: JSON.stringify({
+              model: AI_MODEL,
 
-            input: [
-              {
-                role: "user",
+              input: [
+                {
+                  role: "user",
 
-                content: [
-                  {
-                    type: "input_text",
-                    text: prompt
-                  },
+                  content: [
+                    {
+                      type: "input_text",
+                      text: prompt
+                    },
 
-                  {
-                    type: "input_image",
-                    image_url: imageDataUrl,
-                    detail: "high"
-                  }
-                ]
-              }
-            ]
-          })
-        }
-      );
-
-      const data =
-        await openaiResponse.json();
-
-      console.log(
-        "OPENAI STATUS:",
-        openaiResponse.status
-      );
-
-      /*
-       * If OpenAI returns an error,
-       * expose the actual message so we can
-       * diagnose the problem instead of
-       * showing "empty response".
-       */
-
-      if (!openaiResponse.ok) {
-        console.error(
-          "OPENAI ERROR:",
-          JSON.stringify(data)
+                    {
+                      type: "input_image",
+                      image_url: imageUrl,
+                      detail: "high"
+                    }
+                  ]
+                }
+              ]
+            })
+          }
         );
 
-        return res.status(502).json({
-          error:
-            data?.error?.message ||
-            data?.error?.code ||
-            "The AI service returned an error."
-        });
-      }
+      const rawText =
+        await response.text();
 
-      /*
-       * Responses API may provide convenient
-       * output_text.
-       */
-
-      let output = "";
-
-      if (
-        typeof data.output_text === "string"
-      ) {
-        output =
-          data.output_text.trim();
-      }
-
-      /*
-       * If output_text is empty,
-       * inspect the complete output array.
-       */
-
-      if (
-        !output &&
-        Array.isArray(data.output)
-      ) {
-        const textParts = [];
-
-        for (
-          const item of data.output
-        ) {
-          if (!item) continue;
-
-          if (
-            Array.isArray(item.content)
-          ) {
-            for (
-              const part of item.content
-            ) {
-              if (
-                part &&
-                typeof part.text === "string"
-              ) {
-                textParts.push(
-                  part.text
-                );
-              }
-            }
-          }
-        }
-
-        output =
-          textParts.join("\n").trim();
-      }
-
-      /*
-       * Extra fallback for unusual
-       * Responses API structures.
-       */
-
-      if (
-        !output &&
-        Array.isArray(data.output)
-      ) {
-        try {
-          const serialized =
-            JSON.stringify(data.output);
-
-          if (
-            serialized &&
-            serialized !== "[]"
-          ) {
-            const textMatches =
-              serialized.match(
-                /"text"\s*:\s*"([^"]*)"/g
-              );
-
-            if (textMatches) {
-              output =
-                textMatches
-                  .map(x =>
-                    x
-                      .replace(
-                        /^"text"\s*:\s*"/,
-                        ""
-                      )
-                      .replace(
-                        /"$/,
-                        ""
-                      )
-                  )
-                  .join("\n")
-                  .trim();
-            }
-          }
-        } catch {}
-      }
-
-      console.log(
-        "AI OUTPUT LENGTH:",
-        output.length
-      );
-
-      console.log(
-        "AI OUTPUT:",
-        output
-      );
-
-      /*
-       * If there is still no text,
-       * return diagnostic information.
-       */
-
-      if (!output) {
-        console.error(
-          "EMPTY OPENAI RESPONSE:",
-          JSON.stringify(data)
-        );
-
-        return res.status(502).json({
-          error:
-            "The AI returned no readable text. Please try again with a clearer chart image."
-        });
-      }
-
-      /*
-       * Remove Markdown code fences if the
-       * model accidentally includes them.
-       */
-
-      let cleaned =
-        output
-          .replace(
-            /^```json\s*/i,
-            ""
-          )
-          .replace(
-            /^```\s*/i,
-            ""
-          )
-          .replace(
-            /\s*```$/i,
-            ""
-          )
-          .trim();
-
-      let analysis = null;
-
-      /*
-       * Attempt 1:
-       * direct JSON parsing.
-       */
+      let data;
 
       try {
-        analysis =
-          JSON.parse(cleaned);
-      } catch {}
-
-      /*
-       * Attempt 2:
-       * find the first { and last }.
-       */
-
-      if (!analysis) {
-        const start =
-          cleaned.indexOf("{");
-
-        const end =
-          cleaned.lastIndexOf("}");
-
-        if (
-          start !== -1 &&
-          end !== -1 &&
-          end > start
-        ) {
-          const possibleJson =
-            cleaned.substring(
-              start,
-              end + 1
-            );
-
-          try {
-            analysis =
-              JSON.parse(
-                possibleJson
-              );
-          } catch {}
-        }
+        data = JSON.parse(rawText);
+      } catch {
+        data = {
+          raw: rawText
+        };
       }
 
-      /*
-       * If JSON parsing failed,
-       * tell the frontend what happened.
-       */
-
-      if (!analysis) {
+      if (!response.ok) {
         console.error(
-          "INVALID AI JSON:",
-          cleaned
+          "OPENAI ERROR:",
+          data
         );
 
-        return res.status(502).json({
+        return res.status(500).json({
           error:
-            "The AI returned an unreadable analysis. Please try again."
+            data?.error?.message ||
+            "OpenAI analysis failed."
         });
       }
 
-      /*
-       * Safe field cleaner.
-       */
+      const responseText =
+        extractResponseText(data);
 
-      const clean = (
-        value,
-        fallback = "WAIT"
-      ) => {
-        if (
-          value === undefined ||
-          value === null
-        ) {
-          return fallback;
-        }
+      if (!responseText) {
+        return res.status(500).json({
+          error:
+            "AI returned an empty response."
+        });
+      }
 
-        const text =
-          String(value).trim();
+      let result;
 
-        if (!text) {
-          return fallback;
-        }
-
-        return text.slice(
-          0,
-          2000
+      try {
+        result = JSON.parse(
+          cleanJsonText(responseText)
         );
-      };
+      } catch (error) {
+        console.error(
+          "AI JSON PARSE ERROR:",
+          responseText
+        );
 
-      /*
-       * Direction validation.
-       */
-
-      let direction =
-        String(
-          analysis.direction ||
-          "WAIT"
-        )
-          .trim()
-          .toUpperCase();
-
-      if (
-        ![
-          "BUY",
-          "SELL",
-          "WAIT"
-        ].includes(direction)
-      ) {
-        direction = "WAIT";
+        return res.status(500).json({
+          error:
+            "AI returned invalid analysis data."
+        });
       }
 
-      /*
-       * Confidence validation.
-       */
-
-      let confidence =
-        String(
-          analysis.confidence ||
-          "Low"
-        ).trim();
-
-      if (
-        ![
-          "Low",
-          "Medium",
-          "High"
-        ].includes(confidence)
-      ) {
-        confidence = "Low";
-      }
-
-      /*
-       * Final normalized result.
-       */
-
-      const result = {
+      result = {
         symbol:
-          clean(
-            analysis.symbol ||
-            "XAUUSD",
-            "XAUUSD"
-          ),
+          result.symbol || "XAUUSD",
 
         timeframe:
-          clean(
-            analysis.timeframe
-          ),
+          result.timeframe || "Unknown",
 
-        direction,
+        direction:
+          normalizeDirection(
+            result.direction
+          ),
 
         entry:
-          clean(
-            analysis.entry
-          ),
+          result.entry ??
+          result.entry_price ??
+          result.entryPrice ??
+          "",
 
         tp1:
-          clean(
-            analysis.tp1
-          ),
+          result.tp1 ??
+          result.TP1 ??
+          "",
 
         tp2:
-          clean(
-            analysis.tp2
-          ),
+          result.tp2 ??
+          result.TP2 ??
+          "",
 
         tp3:
-          clean(
-            analysis.tp3
-          ),
+          result.tp3 ??
+          result.TP3 ??
+          "",
 
         tp4:
-          clean(
-            analysis.tp4
-          ),
+          result.tp4 ??
+          result.TP4 ??
+          "",
 
         tp5:
-          clean(
-            analysis.tp5
-          ),
+          result.tp5 ??
+          result.TP5 ??
+          "",
 
         sl:
-          clean(
-            analysis.sl
-          ),
+          result.sl ??
+          result.SL ??
+          result.stop_loss ??
+          result.stopLoss ??
+          "",
 
-        confidence,
+        confidence:
+          normalizeConfidence(
+            result.confidence
+          ),
 
         analysis:
-          clean(
-            analysis.analysis,
-            "No detailed analysis was returned."
-          ),
+          result.analysis ||
+          result.reason ||
+          result.explanation ||
+          "",
 
         warning:
-          clean(
-            analysis.warning,
-            "Trading involves market risk. This analysis does not guarantee profit."
-          )
+          result.warning ||
+          "Trading involves risk. Use proper risk management."
       };
 
-      /*
-       * Store the analysis in Neon.
-       */
-
-      await sql`
+      const saved = await sql`
         INSERT INTO analyses (
-          id,
           user_id,
           symbol,
           timeframe,
@@ -1376,51 +1201,47 @@ Return JSON only.
           warning
         )
         VALUES (
-          ${createId()},
           ${req.user.id},
           ${result.symbol},
           ${result.timeframe},
           ${result.direction},
-          ${result.entry},
-          ${result.tp1},
-          ${result.tp2},
-          ${result.tp3},
-          ${result.tp4},
-          ${result.tp5},
-          ${result.sl},
+          ${String(result.entry)},
+          ${String(result.tp1)},
+          ${String(result.tp2)},
+          ${String(result.tp3)},
+          ${String(result.tp4)},
+          ${String(result.tp5)},
+          ${String(result.sl)},
           ${result.confidence},
           ${result.analysis},
           ${result.warning}
         )
+        RETURNING *
       `;
-
-      /*
-       * Send the final result to the website.
-       */
 
       return res.json({
         ok: true,
-        analysis: result
+        analysis: result,
+        saved: saved[0]
       });
-
     } catch (error) {
       console.error(
-        "AI CHART ANALYSIS ERROR:",
+        "ANALYZE ERROR:",
         error
       );
 
       return res.status(500).json({
         error:
           error?.message ||
-          "Could not analyze the chart."
+          "Chart analysis failed."
       });
     }
   }
 );
 
-/* =========================
-   USER ANALYSIS HISTORY
-========================= */
+/* =========================================================
+   ANALYSIS HISTORY
+========================================================= */
 
 app.get(
   "/api/analyses",
@@ -1428,40 +1249,24 @@ app.get(
   async (req, res) => {
     try {
       const rows = await sql`
-        SELECT
-          id,
-          symbol,
-          timeframe,
-          direction,
-          entry,
-          tp1,
-          tp2,
-          tp3,
-          tp4,
-          tp5,
-          sl,
-          confidence,
-          analysis,
-          warning,
-          created_at AS "createdAt"
+        SELECT *
         FROM analyses
         WHERE user_id = ${req.user.id}
         ORDER BY created_at DESC
-        LIMIT 20
+        LIMIT 100
       `;
 
-      res.json({
+      return res.json({
         ok: true,
         analyses: rows
       });
-
     } catch (error) {
       console.error(
-        "ANALYSIS HISTORY ERROR:",
+        "ANALYSES ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         error:
           "Could not load analysis history."
       });
@@ -1469,42 +1274,50 @@ app.get(
   }
 );
 
-/* =========================
+/* =========================================================
    ADMIN LOGIN
-========================= */
+========================================================= */
 
-app.post(
-  "/api/admin/login",
-  (req, res) => {
-    const password =
-      String(req.body?.password || "");
-
-    if (
-      password !== ADMIN_PASSWORD
-    ) {
-      return res.status(401).json({
-        error:
-          "Invalid admin password."
-      });
-    }
-
-    setSessionCookie(
-      res,
-      createToken(
-        "admin",
-        "admin"
-      )
+app.post("/api/admin/login", (req, res) => {
+  const password =
+    String(
+      req.body?.password || ""
     );
 
-    res.json({
-      ok: true
+  if (
+    !password ||
+    password !== ADMIN_PASSWORD
+  ) {
+    return res.status(401).json({
+      error:
+        "Invalid admin password."
     });
   }
-);
 
-/* =========================
+  const token =
+    createToken("admin", "admin");
+
+  setSessionCookie(
+    req,
+    res,
+    token
+  );
+
+  res.setHeader(
+    "Cache-Control",
+    "no-store"
+  );
+
+  return res.json({
+    ok: true,
+    loggedIn: true,
+    role: "admin"
+  });
+});
+
+/* =========================================================
    ADMIN DATA
-========================= */
+========================================================= */
 
 app.get(
   "/api/admin/data",
@@ -1525,9 +1338,16 @@ app.get(
 
       const payments = await sql`
         SELECT
-          p.*,
-          u.email AS user_email,
-          u.name AS user_name
+          p.id,
+          p.user_id,
+          p.method,
+          p.amount,
+          p.reference,
+          p.status,
+          p.created_at,
+          p.reviewed_at,
+          u.name,
+          u.email
         FROM payments p
         LEFT JOIN users u
           ON u.id = p.user_id
@@ -1535,143 +1355,24 @@ app.get(
       `;
 
       const signals = await sql`
-        SELECT
-          id,
-          title,
-          body,
-          created_at AS "createdAt"
+        SELECT *
         FROM signals
         ORDER BY created_at DESC
       `;
 
-      const support = await sql`
-        SELECT
-          s.id,
-          s.user_id,
-          s.message,
-          s.created_at,
-          u.email AS user_email
-        FROM support s
-        LEFT JOIN users u
-          ON u.id = s.user_id
-        ORDER BY s.created_at DESC
-      `;
-
-      const analyses = await sql`
-        SELECT
-          a.*,
-          u.email AS user_email,
-          u.name AS user_name
-        FROM analyses a
-        LEFT JOIN users u
-          ON u.id = a.user_id
-        ORDER BY a.created_at DESC
-        LIMIT 100
-      `;
-
-      res.json({
-        users:
-          users.map(formatUser),
-
-        payments:
-          payments.map(p => ({
-            ...formatPayment(p),
-
-            userEmail:
-              p.user_email ||
-              "Unknown",
-
-            userName:
-              p.user_name ||
-              "Unknown"
-          })),
-
-        signals,
-
-        support:
-          support.map(s => ({
-            id: s.id,
-
-            userId:
-              s.user_id,
-
-            message:
-              s.message,
-
-            createdAt:
-              s.created_at,
-
-            userEmail:
-              s.user_email ||
-              "Unknown"
-          })),
-
-        analyses:
-          analyses.map(a => ({
-            id: a.id,
-
-            userId:
-              a.user_id,
-
-            userEmail:
-              a.user_email ||
-              "Unknown",
-
-            userName:
-              a.user_name ||
-              "Unknown",
-
-            symbol:
-              a.symbol,
-
-            timeframe:
-              a.timeframe,
-
-            direction:
-              a.direction,
-
-            entry:
-              a.entry,
-
-            tp1:
-              a.tp1,
-
-            tp2:
-              a.tp2,
-
-            tp3:
-              a.tp3,
-
-            tp4:
-              a.tp4,
-
-            tp5:
-              a.tp5,
-
-            sl:
-              a.sl,
-
-            confidence:
-              a.confidence,
-
-            analysis:
-              a.analysis,
-
-            warning:
-              a.warning,
-
-            createdAt:
-              a.created_at
-          }))
+      return res.json({
+        ok: true,
+        users,
+        payments,
+        signals
       });
-
     } catch (error) {
       console.error(
         "ADMIN DATA ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         error:
           "Could not load admin data."
       });
@@ -1679,32 +1380,44 @@ app.get(
   }
 );
 
-/* =========================
+/* =========================================================
    ADMIN RECEIPT
-========================= */
+========================================================= */
 
 app.get(
-  "/api/admin/receipts/:paymentId",
+  "/api/admin/payment/:id/receipt",
   requireAdmin,
   async (req, res) => {
     try {
+      const id =
+        Number(req.params.id);
+
       const rows = await sql`
         SELECT
           receipt_data,
           receipt_mime
         FROM payments
-        WHERE id = ${req.params.paymentId}
+        WHERE id = ${id}
         LIMIT 1
       `;
 
-      if (
-        !rows.length ||
-        !rows[0].receipt_data
-      ) {
-        return res.status(404).send(
-          "Receipt not found."
-        );
+      if (!rows.length) {
+        return res.status(404).json({
+          error: "Payment not found."
+        });
       }
+
+      if (!rows[0].receipt_data) {
+        return res.status(404).json({
+          error: "Receipt not found."
+        });
+      }
+
+      const buffer =
+        Buffer.from(
+          rows[0].receipt_data,
+          "base64"
+        );
 
       res.setHeader(
         "Content-Type",
@@ -1712,81 +1425,65 @@ app.get(
           "image/jpeg"
       );
 
-      res.setHeader(
-        "Cache-Control",
-        "private, no-store"
-      );
-
-      res.send(
-        rows[0].receipt_data
-      );
-
+      return res.send(buffer);
     } catch (error) {
       console.error(
         "RECEIPT ERROR:",
         error
       );
 
-      res.status(500).send(
-        "Could not load receipt."
-      );
+      return res.status(500).json({
+        error:
+          "Could not load receipt."
+      });
     }
   }
 );
 
-/* =========================
-   ADMIN PAYMENT APPROVE
-========================= */
+/* =========================================================
+   ADMIN APPROVE PAYMENT
+========================================================= */
 
 app.post(
-  "/api/admin/payments/:paymentId/approve",
+  "/api/admin/payment/:id/approve",
   requireAdmin,
   async (req, res) => {
     try {
-      const paymentRows = await sql`
-        SELECT *
-        FROM payments
-        WHERE id = ${req.params.paymentId}
-        LIMIT 1
-      `;
+      const id =
+        Number(req.params.id);
 
-      if (
-        !paymentRows.length
-      ) {
-        return res.status(404).json({
-          error:
-            "Payment not found."
-        });
-      }
-
-      const payment =
-        paymentRows[0];
-
-      await sql`
+      const rows = await sql`
         UPDATE payments
         SET
           status = 'approved',
           reviewed_at = NOW()
-        WHERE id = ${payment.id}
+        WHERE id = ${id}
+        RETURNING *
       `;
+
+      if (!rows.length) {
+        return res.status(404).json({
+          error: "Payment not found."
+        });
+      }
 
       await sql`
         UPDATE users
         SET approved = TRUE
-        WHERE id = ${payment.user_id}
+        WHERE id = ${rows[0].user_id}
       `;
 
-      res.json({
-        ok: true
+      return res.json({
+        ok: true,
+        payment: rows[0]
       });
-
     } catch (error) {
       console.error(
         "APPROVE ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         error:
           "Could not approve payment."
       });
@@ -1794,59 +1491,44 @@ app.post(
   }
 );
 
-/* =========================
-   ADMIN PAYMENT REJECT
-========================= */
+/* =========================================================
+   ADMIN REJECT PAYMENT
+========================================================= */
 
 app.post(
-  "/api/admin/payments/:paymentId/reject",
+  "/api/admin/payment/:id/reject",
   requireAdmin,
   async (req, res) => {
     try {
-      const paymentRows = await sql`
-        SELECT *
-        FROM payments
-        WHERE id = ${req.params.paymentId}
-        LIMIT 1
-      `;
+      const id =
+        Number(req.params.id);
 
-      if (
-        !paymentRows.length
-      ) {
-        return res.status(404).json({
-          error:
-            "Payment not found."
-        });
-      }
-
-      const payment =
-        paymentRows[0];
-
-      await sql`
+      const rows = await sql`
         UPDATE payments
         SET
           status = 'rejected',
           reviewed_at = NOW()
-        WHERE id = ${payment.id}
+        WHERE id = ${id}
+        RETURNING *
       `;
 
-      await sql`
-        UPDATE users
-        SET approved = FALSE
-        WHERE id = ${payment.user_id}
-      `;
+      if (!rows.length) {
+        return res.status(404).json({
+          error: "Payment not found."
+        });
+      }
 
-      res.json({
-        ok: true
+      return res.json({
+        ok: true,
+        payment: rows[0]
       });
-
     } catch (error) {
       console.error(
         "REJECT ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         error:
           "Could not reject payment."
       });
@@ -1854,56 +1536,104 @@ app.post(
   }
 );
 
-/* =========================
-   ADMIN SIGNALS
-========================= */
+/* =========================================================
+   ADMIN APPROVE USER
+========================================================= */
+
+app.post(
+  "/api/admin/user/:id/approve",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const id =
+        Number(req.params.id);
+
+      const rows = await sql`
+        UPDATE users
+        SET approved = TRUE
+        WHERE id = ${id}
+        RETURNING
+          id,
+          name,
+          email,
+          approved,
+          email_verified,
+          created_at
+      `;
+
+      if (!rows.length) {
+        return res.status(404).json({
+          error: "User not found."
+        });
+      }
+
+      return res.json({
+        ok: true,
+        user: rows[0]
+      });
+    } catch (error) {
+      console.error(
+        "USER APPROVE ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Could not approve user."
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ADMIN CREATE SIGNAL
+========================================================= */
 
 app.post(
   "/api/admin/signals",
   requireAdmin,
   async (req, res) => {
     try {
-      const {
-        title,
-        body
-      } = req.body || {};
+      const title =
+        String(
+          req.body?.title || ""
+        ).trim();
 
-      if (!body) {
+      const body =
+        String(
+          req.body?.body || ""
+        ).trim();
+
+      if (!title || !body) {
         return res.status(400).json({
           error:
-            "Signal body required."
+            "Title and body are required."
         });
       }
 
-      await sql`
+      const rows = await sql`
         INSERT INTO signals (
-          id,
           title,
           body
         )
         VALUES (
-          ${createId()},
-          ${String(
-            title ||
-            "XAUUSD Signal"
-          ).slice(0, 120)},
-          ${String(
-            body
-          ).slice(0, 5000)}
+          ${title},
+          ${body}
         )
+        RETURNING *
       `;
 
-      res.json({
-        ok: true
+      return res.json({
+        ok: true,
+        signal: rows[0]
       });
-
     } catch (error) {
       console.error(
-        "SIGNAL ERROR:",
+        "CREATE SIGNAL ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         error:
           "Could not create signal."
       });
@@ -1911,31 +1641,33 @@ app.post(
   }
 );
 
-/* =========================
-   DELETE SIGNAL
-========================= */
+/* =========================================================
+   ADMIN DELETE SIGNAL
+========================================================= */
 
 app.delete(
   "/api/admin/signals/:id",
   requireAdmin,
   async (req, res) => {
     try {
+      const id =
+        Number(req.params.id);
+
       await sql`
         DELETE FROM signals
-        WHERE id = ${req.params.id}
+        WHERE id = ${id}
       `;
 
-      res.json({
+      return res.json({
         ok: true
       });
-
     } catch (error) {
       console.error(
         "DELETE SIGNAL ERROR:",
         error
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         error:
           "Could not delete signal."
       });
@@ -1943,55 +1675,35 @@ app.delete(
   }
 );
 
-/* =========================
-   MULTER ERROR HANDLER
-========================= */
+/* =========================================================
+   MULTER / GENERAL ERRORS
+========================================================= */
 
-app.use(
-  (error, req, res, next) => {
-    if (
-      error &&
-      error.code === "LIMIT_FILE_SIZE"
-    ) {
-      return res.status(400).json({
-        error:
-          "The image is too large. Maximum size is 5 MB."
-      });
-    }
+app.use((error, req, res, next) => {
+  console.error(
+    "API ERROR:",
+    error
+  );
 
-    if (
-      error &&
-      error.message
-    ) {
-      return res.status(400).json({
-        error: error.message
-      });
-    }
-
-    next(error);
-  }
-);
-
-/* =========================
-   FINAL ERROR HANDLER
-========================= */
-
-app.use(
-  (error, req, res, next) => {
-    console.error(
-      "UNHANDLED ERROR:",
-      error
-    );
-
-    res.status(500).json({
+  if (
+    error instanceof multer.MulterError
+  ) {
+    return res.status(400).json({
       error:
-        "Internal server error."
+        error.message ||
+        "Upload error."
     });
   }
-);
 
-/* =========================
-   EXPORT FOR VERCEL
-========================= */
+  return res.status(500).json({
+    error:
+      error?.message ||
+      "Server error."
+  });
+});
+
+/* =========================================================
+   EXPORT
+========================================================= */
 
 module.exports = app;
