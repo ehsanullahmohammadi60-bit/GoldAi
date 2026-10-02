@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0e16">
+<title>GoldAI — XAUUSD Market Analyzer</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">G</div>
+    <div><strong>GoldAI</strong><span>XAUUSD ANALYZER</span></div>
+  </div>
+  <button class="menu" id="menuBtn">☰</button>
+  <nav id="nav">
+    <a href="#home">Home</a>
+    <a href="#analyzer">Analyzer</a>
+    <a href="#pricing">Access</a>
+    <a href="#support">Support</a>
+  </nav>
+</header>
+
+<main>
+<section id="home" class="hero">
+  <div class="badge">◆ GOLD MARKET ONLY</div>
+  <h1>Professional <em>XAUUSD</em><br>Chart Analysis</h1>
+  <p>Upload a Gold chart and prepare a structured technical analysis with entry, targets, stop-loss and market direction.</p>
+  <div class="hero-actions">
+    <a class="btn primary" href="#analyzer">Analyze Gold Chart</a>
+    <a class="btn ghost" href="#pricing">Activate Access</a>
+  </div>
+  <div class="trust-row">
+    <span>🔒 Secure account</span><span>⚡ Fast analysis</span><span>📱 Mobile ready</span>
+  </div>
+</section>
+
+<section class="stats">
+  <div><b>XAUUSD</b><small>Supported market</small></div>
+  <div><b>24/7</b><small>Access dashboard</small></div>
+  <div><b>5</b><small>Target levels</small></div>
+</section>
+
+<section id="pricing" class="section">
+  <div class="section-head">
+    <span class="eyebrow">ACCESS</span>
+    <h2>Activate your account</h2>
+    <p>One-time activation fee. Choose your preferred payment currency and method.</p>
+  </div>
+  <div class="price-card">
+    <div class="price-main"><span>One-time activation</span><strong id="priceValue">240 AFN</strong><small id="priceSub">or 4 USD</small></div>
+    <div class="payment-grid">
+      <button class="pay-option active" data-method="HesabPay" data-price="240 AFN">
+        <img src="assets/hesabpay.jpg" alt="HesabPay">
+        <span>HesabPay</span><small>AFN</small>
+      </button>
+      <button class="pay-option" data-method="Binance Pay" data-price="4 USD">
+        <div class="coin">₿</div><span>Binance Pay</span><small>USDT / USD</small>
+      </button>
+      <button class="pay-option" data-method="Pay Account" data-price="4 USD">
+        <div class="coin">$</div><span>Pay Account</span><small>USD</small>
+      </button>
+      <button class="pay-option" data-method="AFN Bank / Wallet" data-price="240 AFN">
+        <div class="coin">؋</div><span>Afghani</span><small>AFN</small>
+      </button>
+    </div>
+    <button class="btn primary wide" id="checkoutBtn">Continue with HesabPay</button>
+    <p class="fine">Payment integration is shown as a secure checkout interface in this prototype. Real automatic confirmation requires your official HesabPay/Binance merchant credentials.</p>
+  </div>
+</section>
+
+<section id="analyzer" class="section analyzer">
+  <div class="section-head">
+    <span class="eyebrow">XAUUSD ONLY</span>
+    <h2>Chart Analyzer</h2>
+    <p>Upload a screenshot of your Gold chart. The current build is a front-end prototype; live AI vision will be connected to the analysis engine later.</p>
+  </div>
+  <div class="analyzer-card">
+    <label class="upload" id="uploadBox">
+      <input id="chartFile" type="file" accept="image/*">
+      <div id="uploadContent">
+        <div class="upload-icon">＋</div>
+        <b>Upload XAUUSD chart</b>
+        <span>PNG, JPG or WEBP</span>
+      </div>
+      <img id="preview" alt="Chart preview">
+    </label>
+    <div class="controls">
+      <label>Timeframe
+        <select id="timeframe">
+          <option>1 Minute</option><option>5 Minutes</option><option selected>15 Minutes</option>
+          <option>1 Hour</option><option>4 Hours</option><option>Daily</option>
+        </select>
+      </label>
+      <label>Analysis type
+        <select id="analysisType">
+          <option selected>Technical structure</option>
+          <option>Trend + support/resistance</option>
+          <option>Full chart review</option>
+        </select>
+      </label>
+    </div>
+    <button class="btn primary wide" id="analyzeBtn">Run Analysis</button>
+    <div class="result hidden" id="result">
+      <div class="result-top"><span>DEMO RESULT</span><span id="resultTime">15M</span></div>
+      <h3>AI analysis engine not connected yet</h3>
+      <p>Once the vision/API engine is connected, this panel will return the actual chart-based result:</p>
+      <div class="levels">
+        <div><small>Direction</small><b>BUY / SELL</b></div>
+        <div><small>Entry</small><b>—</b></div>
+        <div><small>TP1</small><b>—</b></div>
+        <div><small>TP2</small><b>—</b></div>
+        <div><small>TP3</small><b>—</b></div>
+        <div><small>SL</small><b>—</b></div>
+      </div>
+      <p class="warning">Educational analysis only. No profit or accuracy is guaranteed.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section features">
+  <div class="section-head"><span class="eyebrow">DASHBOARD</span><h2>Built for Gold traders</h2></div>
+  <div class="feature-grid">
+    <article><span>01</span><h3>Chart Upload</h3><p>Simple mobile upload for XAUUSD screenshots.</p></article>
+    <article><span>02</span><h3>Structured Output</h3><p>Entry, TP levels, SL and technical reasoning in one place.</p></article>
+    <article><span>03</span><h3>Analysis History</h3><p>Keep a record of previous requests in the user dashboard.</p></article>
+    <article><span>04</span><h3>Payment Access</h3><p>Activation flow prepared for AFN, USD, Pay Account and Binance Pay.</p></article>
+  </div>
+</section>
+
+<section id="support" class="section support">
+  <div class="support-card">
+    <span class="eyebrow">SUPPORT</span>
+    <h2>Need help?</h2>
+    <p>For payment verification, account access or technical issues, contact support from your account dashboard.</p>
+    <button class="btn ghost" onclick="alert('Support center will be connected to your Telegram/email later.')">Open Support</button>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div><strong>GoldAI</strong> — XAUUSD Market Analyzer</div>
+  <span>© 2026 GoldAI. All rights reserved.</span>
+</footer>
+
+<div class="modal hidden" id="payModal">
+  <div class="modal-box">
+    <button class="close" id="closeModal">×</button>
+    <span class="eyebrow">CHECKOUT</span>
+    <h2 id="modalTitle">HesabPay</h2>
+    <div class="checkout-amount"><small>Activation fee</small><strong id="modalPrice">240 AFN</strong></div>
+    <p id="paymentInstructions">Official payment details will appear here after your payment account/link is connected.</p>
+    <label>Transaction ID / Reference
+      <input id="txId" placeholder="Enter your payment reference">
+    </label>
+    <button class="btn primary wide" id="submitPayment">Submit payment reference</button>
+    <p class="fine">Do not enter passwords, private keys or seed phrases.</p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
