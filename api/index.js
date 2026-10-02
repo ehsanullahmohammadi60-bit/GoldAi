@@ -1,67 +1,119 @@
 const express = require("express");
 const multer = require("multer");
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
+const { neon } = require("@neondatabase/serverless");
 
 const app = express();
-
-/* =========================
-   BASIC SETTINGS
-========================= */
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-const DATA_DIR = "/tmp/goldai";
-const UPLOAD_DIR = path.join(DATA_DIR, "receipts");
-const DB_FILE = path.join(DATA_DIR, "db.json");
+/* =========================
+   NEON DATABASE
+========================= */
 
-try {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-} catch (err) {
-  console.error("Directory error:", err);
+const DATABASE_URL = process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  console.error("DATABASE_URL is missing.");
+}
+
+const sql = DATABASE_URL ? neon(DATABASE_URL) : null;
+
+let dbReady = false;
+let dbInitPromise = null;
+
+async function initDatabase() {
+  if (!sql) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  if (dbReady) return;
+
+  if (!dbInitPromise) {
+    dbInitPromise = (async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password_salt TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          approved BOOLEAN NOT NULL DEFAULT FALSE,
+          email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS payments (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          method TEXT NOT NULL,
+          amount TEXT NOT NULL,
+          reference TEXT NOT NULL,
+          receipt_data BYTEA,
+          receipt_mime TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          reviewed_at TIMESTAMPTZ
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS signals (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS support (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          message TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS payments_user_id_idx
+        ON payments(user_id)
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS support_user_id_idx
+        ON support(user_id)
+      `;
+
+      dbReady = true;
+    })().catch(error => {
+      dbInitPromise = null;
+      throw error;
+    });
+  }
+
+  await dbInitPromise;
 }
 
 /* =========================
-   DATABASE
+   DATABASE MIDDLEWARE
 ========================= */
 
-function createEmptyDB() {
-  return {
-    users: [],
-    payments: [],
-    signals: [],
-    support: []
-  };
-}
-
-function loadDB() {
+app.use(async (req, res, next) => {
   try {
-    if (!fs.existsSync(DB_FILE)) {
-      const db = createEmptyDB();
-      fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-      return db;
-    }
+    await initDatabase();
+    next();
+  } catch (error) {
+    console.error("DATABASE INIT ERROR:", error);
 
-    return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
-  } catch (err) {
-    console.error("DB load error:", err);
-    return createEmptyDB();
+    res.status(500).json({
+      error: "Database connection failed."
+    });
   }
-}
-
-let db = loadDB();
-
-function saveDB() {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-    return true;
-  } catch (err) {
-    console.error("DB save error:", err);
-    return false;
-  }
-}
+});
 
 /* =========================
    HELPERS
@@ -98,8 +150,8 @@ function checkPassword(password, stored) {
       .toString("hex");
 
     return crypto.timingSafeEqual(
-      Buffer.from(hash),
-      Buffer.from(stored.hash)
+      Buffer.from(hash, "hex"),
+      Buffer.from(stored.hash, "hex")
     );
   } catch {
     return false;
@@ -182,10 +234,42 @@ function setSessionCookie(res, token) {
 }
 
 /* =========================
+   USER HELPERS
+========================= */
+
+function formatUser(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    approved: row.approved,
+    emailVerified: row.email_verified,
+    createdAt: row.created_at
+  };
+}
+
+function formatPayment(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    method: row.method,
+    amount: row.amount,
+    reference: row.reference,
+    receipt:
+      row.receipt_data
+        ? `/api/admin/receipts/${row.id}`
+        : null,
+    status: row.status,
+    createdAt: row.created_at,
+    reviewedAt: row.reviewed_at
+  };
+}
+
+/* =========================
    AUTH MIDDLEWARE
 ========================= */
 
-function requireUser(req, res, next) {
+async function requireUser(req, res, next) {
   const session = getSession(req);
 
   if (!session || session.role !== "user") {
@@ -194,19 +278,30 @@ function requireUser(req, res, next) {
     });
   }
 
-  const user = db.users.find(
-    u => u.id === session.userId
-  );
+  try {
+    const rows = await sql`
+      SELECT *
+      FROM users
+      WHERE id = ${session.userId}
+      LIMIT 1
+    `;
 
-  if (!user) {
-    return res.status(401).json({
-      error: "LOGIN_REQUIRED"
+    if (!rows.length) {
+      return res.status(401).json({
+        error: "LOGIN_REQUIRED"
+      });
+    }
+
+    req.user = rows[0];
+
+    next();
+  } catch (error) {
+    console.error("AUTH ERROR:", error);
+
+    return res.status(500).json({
+      error: "Authentication failed."
     });
   }
-
-  req.user = user;
-
-  next();
 }
 
 function requireAdmin(req, res, next) {
@@ -226,7 +321,7 @@ function requireAdmin(req, res, next) {
 ========================= */
 
 const upload = multer({
-  dest: UPLOAD_DIR,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024
   },
@@ -241,14 +336,15 @@ const upload = multer({
 });
 
 /* =========================
-   HEALTH / TEST
+   HEALTH
 ========================= */
 
 app.get("/", (req, res) => {
   res.json({
     ok: true,
     service: "GoldAI API",
-    status: "online"
+    status: "online",
+    database: "neon"
   });
 });
 
@@ -256,7 +352,8 @@ app.get("/api", (req, res) => {
   res.json({
     ok: true,
     service: "GoldAI API",
-    status: "online"
+    status: "online",
+    database: "neon"
   });
 });
 
@@ -264,7 +361,8 @@ app.get("/health", (req, res) => {
   res.json({
     ok: true,
     service: "GoldAI API",
-    status: "online"
+    status: "online",
+    database: "neon"
   });
 });
 
@@ -272,7 +370,8 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
     service: "GoldAI API",
-    status: "online"
+    status: "online",
+    database: "neon"
   });
 });
 
@@ -280,7 +379,7 @@ app.get("/api/health", (req, res) => {
    REGISTER
 ========================= */
 
-app.post("/api/register", (req, res) => {
+app.post("/api/register", async (req, res) => {
   try {
     const {
       name,
@@ -303,11 +402,14 @@ app.post("/api/register", (req, res) => {
     const cleanEmail =
       String(email).trim().toLowerCase();
 
-    const existing = db.users.find(
-      u => u.email === cleanEmail
-    );
+    const existing = await sql`
+      SELECT id
+      FROM users
+      WHERE email = ${cleanEmail}
+      LIMIT 1
+    `;
 
-    if (existing) {
+    if (existing.length) {
       return res.status(409).json({
         error:
           "An account with this email already exists."
@@ -318,29 +420,31 @@ app.post("/api/register", (req, res) => {
       String(password)
     );
 
-    const user = {
-      id: createId(),
-      name: String(name)
-        .trim()
-        .slice(0, 80),
+    const userId = createId();
 
-      email: cleanEmail,
+    const rows = await sql`
+      INSERT INTO users (
+        id,
+        name,
+        email,
+        password_salt,
+        password_hash,
+        approved,
+        email_verified
+      )
+      VALUES (
+        ${userId},
+        ${String(name).trim().slice(0, 80)},
+        ${cleanEmail},
+        ${passwordData.salt},
+        ${passwordData.hash},
+        FALSE,
+        FALSE
+      )
+      RETURNING *
+    `;
 
-      password: passwordData,
-
-      approved: false,
-
-      createdAt:
-        new Date().toISOString()
-    };
-
-    db.users.push(user);
-
-    if (!saveDB()) {
-      return res.status(500).json({
-        error: "Could not save account."
-      });
-    }
+    const user = rows[0];
 
     setSessionCookie(
       res,
@@ -349,18 +453,11 @@ app.post("/api/register", (req, res) => {
 
     return res.json({
       ok: true,
-      user: {
-        name: user.name,
-        email: user.email,
-        approved: user.approved
-      }
+      user: formatUser(user)
     });
 
   } catch (error) {
-    console.error(
-      "REGISTER ERROR:",
-      error
-    );
+    console.error("REGISTER ERROR:", error);
 
     return res.status(500).json({
       error: "Registration failed."
@@ -372,7 +469,7 @@ app.post("/api/register", (req, res) => {
    LOGIN
 ========================= */
 
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
     const {
       email,
@@ -384,15 +481,23 @@ app.post("/api/login", (req, res) => {
         .trim()
         .toLowerCase();
 
-    const user = db.users.find(
-      u => u.email === cleanEmail
-    );
+    const rows = await sql`
+      SELECT *
+      FROM users
+      WHERE email = ${cleanEmail}
+      LIMIT 1
+    `;
+
+    const user = rows[0];
 
     if (
       !user ||
       !checkPassword(
         String(password || ""),
-        user.password
+        {
+          salt: user.password_salt,
+          hash: user.password_hash
+        }
       )
     ) {
       return res.status(401).json({
@@ -407,18 +512,11 @@ app.post("/api/login", (req, res) => {
 
     return res.json({
       ok: true,
-      user: {
-        name: user.name,
-        email: user.email,
-        approved: user.approved
-      }
+      user: formatUser(user)
     });
 
   } catch (error) {
-    console.error(
-      "LOGIN ERROR:",
-      error
-    );
+    console.error("LOGIN ERROR:", error);
 
     return res.status(500).json({
       error: "Login failed."
@@ -445,41 +543,49 @@ app.post("/api/logout", (req, res) => {
    CURRENT USER
 ========================= */
 
-app.get("/api/me", (req, res) => {
-  const session = getSession(req);
+app.get("/api/me", async (req, res) => {
+  try {
+    const session = getSession(req);
 
-  if (!session) {
-    return res.json({
-      loggedIn: false
-    });
-  }
+    if (!session) {
+      return res.json({
+        loggedIn: false
+      });
+    }
 
-  if (session.role === "admin") {
+    if (session.role === "admin") {
+      return res.json({
+        loggedIn: true,
+        role: "admin"
+      });
+    }
+
+    const rows = await sql`
+      SELECT *
+      FROM users
+      WHERE id = ${session.userId}
+      LIMIT 1
+    `;
+
+    if (!rows.length) {
+      return res.json({
+        loggedIn: false
+      });
+    }
+
     return res.json({
       loggedIn: true,
-      role: "admin"
+      role: "user",
+      user: formatUser(rows[0])
+    });
+
+  } catch (error) {
+    console.error("ME ERROR:", error);
+
+    res.status(500).json({
+      error: "Could not load user."
     });
   }
-
-  const user = db.users.find(
-    u => u.id === session.userId
-  );
-
-  if (!user) {
-    return res.json({
-      loggedIn: false
-    });
-  }
-
-  res.json({
-    loggedIn: true,
-    role: "user",
-    user: {
-      name: user.name,
-      email: user.email,
-      approved: user.approved
-    }
-  });
 });
 
 /* =========================
@@ -490,7 +596,7 @@ app.post(
   "/api/payments",
   requireUser,
   upload.single("receipt"),
-  (req, res) => {
+  async (req, res) => {
     try {
       const method = req.body.method;
 
@@ -518,60 +624,58 @@ app.post(
         });
       }
 
-      const pending = db.payments.find(
-        p =>
-          p.userId === req.user.id &&
-          p.status === "pending"
-      );
+      const pending = await sql`
+        SELECT id
+        FROM payments
+        WHERE user_id = ${req.user.id}
+          AND status = 'pending'
+        LIMIT 1
+      `;
 
-      if (pending) {
+      if (pending.length) {
         return res.status(409).json({
           error:
             "You already have a payment waiting for review."
         });
       }
 
-      const payment = {
-        id: createId(),
+      const paymentId = createId();
 
-        userId: req.user.id,
-
-        method,
-
-        amount:
-          method === "hesabpay"
-            ? "240 AFN"
-            : "4 USD / USDT",
-
-        reference: String(
-          req.body.reference
+      await sql`
+        INSERT INTO payments (
+          id,
+          user_id,
+          method,
+          amount,
+          reference,
+          receipt_data,
+          receipt_mime,
+          status
         )
-          .trim()
-          .slice(0, 120),
-
-        receipt:
-          "/receipts/" +
-          path.basename(req.file.path),
-
-        status: "pending",
-
-        createdAt:
-          new Date().toISOString()
-      };
-
-      db.payments.push(payment);
-
-      saveDB();
+        VALUES (
+          ${paymentId},
+          ${req.user.id},
+          ${method},
+          ${
+            method === "hesabpay"
+              ? "240 AFN"
+              : "4 USD / USDT"
+          },
+          ${String(req.body.reference)
+            .trim()
+            .slice(0, 120)},
+          ${req.file.buffer},
+          ${req.file.mimetype},
+          'pending'
+        )
+      `;
 
       res.json({
         ok: true
       });
 
     } catch (error) {
-      console.error(
-        "PAYMENT ERROR:",
-        error
-      );
+      console.error("PAYMENT ERROR:", error);
 
       res.status(500).json({
         error: "Payment submission failed."
@@ -587,41 +691,50 @@ app.post(
 app.get(
   "/api/access",
   requireUser,
-  (req, res) => {
-    const payments =
-      db.payments
-        .filter(
-          p => p.userId === req.user.id
-        )
-        .sort(
-          (a, b) =>
-            b.createdAt.localeCompare(
-              a.createdAt
-            )
-        );
+  async (req, res) => {
+    try {
+      const payments = await sql`
+        SELECT *
+        FROM payments
+        WHERE user_id = ${req.user.id}
+        ORDER BY created_at DESC
+      `;
 
-    const latest = payments[0];
+      const latest = payments[0];
 
-    const approved =
-      req.user.approved === true;
+      const approved =
+        req.user.approved === true;
 
-    const signals = approved
-      ? [...db.signals].sort(
-          (a, b) =>
-            b.createdAt.localeCompare(
-              a.createdAt
-            )
-        )
-      : [];
+      let signals = [];
 
-    res.json({
-      approved,
+      if (approved) {
+        signals = await sql`
+          SELECT
+            id,
+            title,
+            body,
+            created_at AS "createdAt"
+          FROM signals
+          ORDER BY created_at DESC
+        `;
+      }
 
-      paymentStatus:
-        latest?.status || "none",
+      res.json({
+        approved,
 
-      signals
-    });
+        paymentStatus:
+          latest?.status || "none",
+
+        signals
+      });
+
+    } catch (error) {
+      console.error("ACCESS ERROR:", error);
+
+      res.status(500).json({
+        error: "Could not load access."
+      });
+    }
   }
 );
 
@@ -632,36 +745,45 @@ app.get(
 app.post(
   "/api/support",
   requireUser,
-  (req, res) => {
-    const message = req.body?.message;
+  async (req, res) => {
+    try {
+      const message = req.body?.message;
 
-    if (
-      !message ||
-      String(message).trim().length < 2
-    ) {
-      return res.status(400).json({
-        error: "Message required."
+      if (
+        !message ||
+        String(message).trim().length < 2
+      ) {
+        return res.status(400).json({
+          error: "Message required."
+        });
+      }
+
+      await sql`
+        INSERT INTO support (
+          id,
+          user_id,
+          message
+        )
+        VALUES (
+          ${createId()},
+          ${req.user.id},
+          ${String(message)
+            .trim()
+            .slice(0, 2000)}
+        )
+      `;
+
+      res.json({
+        ok: true
+      });
+
+    } catch (error) {
+      console.error("SUPPORT ERROR:", error);
+
+      res.status(500).json({
+        error: "Could not send support message."
       });
     }
-
-    db.support.push({
-      id: createId(),
-
-      userId: req.user.id,
-
-      message: String(message)
-        .trim()
-        .slice(0, 2000),
-
-      createdAt:
-        new Date().toISOString()
-    });
-
-    saveDB();
-
-    res.json({
-      ok: true
-    });
   }
 );
 
@@ -707,41 +829,140 @@ app.post(
 app.get(
   "/api/admin/data",
   requireAdmin,
-  (req, res) => {
-    res.json({
-      users: db.users.map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        approved: u.approved,
-        createdAt: u.createdAt
-      })),
+  async (req, res) => {
+    try {
+      const users = await sql`
+        SELECT
+          id,
+          name,
+          email,
+          approved,
+          email_verified,
+          created_at
+        FROM users
+        ORDER BY created_at DESC
+      `;
 
-      payments: db.payments.map(p => ({
-        ...p,
+      const payments = await sql`
+        SELECT
+          p.*,
+          u.email AS user_email,
+          u.name AS user_name
+        FROM payments p
+        LEFT JOIN users u
+          ON u.id = p.user_id
+        ORDER BY p.created_at DESC
+      `;
 
-        userEmail:
-          db.users.find(
-            u => u.id === p.userId
-          )?.email || "Unknown",
+      const signals = await sql`
+        SELECT
+          id,
+          title,
+          body,
+          created_at AS "createdAt"
+        FROM signals
+        ORDER BY created_at DESC
+      `;
 
-        userName:
-          db.users.find(
-            u => u.id === p.userId
-          )?.name || "Unknown"
-      })),
+      const support = await sql`
+        SELECT
+          s.id,
+          s.user_id,
+          s.message,
+          s.created_at,
+          u.email AS user_email
+        FROM support s
+        LEFT JOIN users u
+          ON u.id = s.user_id
+        ORDER BY s.created_at DESC
+      `;
 
-      signals: db.signals,
+      res.json({
+        users: users.map(formatUser),
 
-      support: db.support.map(s => ({
-        ...s,
+        payments: payments.map(p => ({
+          ...formatPayment(p),
+          userEmail:
+            p.user_email || "Unknown",
+          userName:
+            p.user_name || "Unknown"
+        })),
 
-        userEmail:
-          db.users.find(
-            u => u.id === s.userId
-          )?.email || "Unknown"
-      }))
-    });
+        signals,
+
+        support: support.map(s => ({
+          id: s.id,
+          userId: s.user_id,
+          message: s.message,
+          createdAt: s.created_at,
+          userEmail:
+            s.user_email || "Unknown"
+        }))
+      });
+
+    } catch (error) {
+      console.error(
+        "ADMIN DATA ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Could not load admin data."
+      });
+    }
+  }
+);
+
+/* =========================
+   ADMIN RECEIPT
+========================= */
+
+app.get(
+  "/api/admin/receipts/:paymentId",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const rows = await sql`
+        SELECT
+          receipt_data,
+          receipt_mime
+        FROM payments
+        WHERE id = ${req.params.paymentId}
+        LIMIT 1
+      `;
+
+      if (
+        !rows.length ||
+        !rows[0].receipt_data
+      ) {
+        return res.status(404).send(
+          "Receipt not found."
+        );
+      }
+
+      res.setHeader(
+        "Content-Type",
+        rows[0].receipt_mime ||
+          "image/jpeg"
+      );
+
+      res.setHeader(
+        "Cache-Control",
+        "private, no-store"
+      );
+
+      res.send(rows[0].receipt_data);
+
+    } catch (error) {
+      console.error(
+        "RECEIPT ERROR:",
+        error
+      );
+
+      res.status(500).send(
+        "Could not load receipt."
+      );
+    }
   }
 );
 
@@ -752,38 +973,51 @@ app.get(
 app.post(
   "/api/admin/payments/:paymentId/approve",
   requireAdmin,
-  (req, res) => {
-    const payment =
-      db.payments.find(
-        p =>
-          p.id ===
-          req.params.paymentId
+  async (req, res) => {
+    try {
+      const paymentRows = await sql`
+        SELECT *
+        FROM payments
+        WHERE id = ${req.params.paymentId}
+        LIMIT 1
+      `;
+
+      if (!paymentRows.length) {
+        return res.status(404).json({
+          error: "Payment not found."
+        });
+      }
+
+      const payment = paymentRows[0];
+
+      await sql`
+        UPDATE payments
+        SET
+          status = 'approved',
+          reviewed_at = NOW()
+        WHERE id = ${payment.id}
+      `;
+
+      await sql`
+        UPDATE users
+        SET approved = TRUE
+        WHERE id = ${payment.user_id}
+      `;
+
+      res.json({
+        ok: true
+      });
+
+    } catch (error) {
+      console.error(
+        "APPROVE ERROR:",
+        error
       );
 
-    if (!payment) {
-      return res.status(404).json({
-        error: "Payment not found."
+      res.status(500).json({
+        error: "Could not approve payment."
       });
     }
-
-    payment.status = "approved";
-
-    payment.reviewedAt =
-      new Date().toISOString();
-
-    const user = db.users.find(
-      u => u.id === payment.userId
-    );
-
-    if (user) {
-      user.approved = true;
-    }
-
-    saveDB();
-
-    res.json({
-      ok: true
-    });
   }
 );
 
@@ -794,38 +1028,51 @@ app.post(
 app.post(
   "/api/admin/payments/:paymentId/reject",
   requireAdmin,
-  (req, res) => {
-    const payment =
-      db.payments.find(
-        p =>
-          p.id ===
-          req.params.paymentId
+  async (req, res) => {
+    try {
+      const paymentRows = await sql`
+        SELECT *
+        FROM payments
+        WHERE id = ${req.params.paymentId}
+        LIMIT 1
+      `;
+
+      if (!paymentRows.length) {
+        return res.status(404).json({
+          error: "Payment not found."
+        });
+      }
+
+      const payment = paymentRows[0];
+
+      await sql`
+        UPDATE payments
+        SET
+          status = 'rejected',
+          reviewed_at = NOW()
+        WHERE id = ${payment.id}
+      `;
+
+      await sql`
+        UPDATE users
+        SET approved = FALSE
+        WHERE id = ${payment.user_id}
+      `;
+
+      res.json({
+        ok: true
+      });
+
+    } catch (error) {
+      console.error(
+        "REJECT ERROR:",
+        error
       );
 
-    if (!payment) {
-      return res.status(404).json({
-        error: "Payment not found."
+      res.status(500).json({
+        error: "Could not reject payment."
       });
     }
-
-    payment.status = "rejected";
-
-    payment.reviewedAt =
-      new Date().toISOString();
-
-    const user = db.users.find(
-      u => u.id === payment.userId
-    );
-
-    if (user) {
-      user.approved = false;
-    }
-
-    saveDB();
-
-    res.json({
-      ok: true
-    });
   }
 );
 
@@ -836,39 +1083,49 @@ app.post(
 app.post(
   "/api/admin/signals",
   requireAdmin,
-  (req, res) => {
-    const {
-      title,
-      body
-    } = req.body || {};
+  async (req, res) => {
+    try {
+      const {
+        title,
+        body
+      } = req.body || {};
 
-    if (!body) {
-      return res.status(400).json({
-        error:
-          "Signal body required."
+      if (!body) {
+        return res.status(400).json({
+          error:
+            "Signal body required."
+        });
+      }
+
+      await sql`
+        INSERT INTO signals (
+          id,
+          title,
+          body
+        )
+        VALUES (
+          ${createId()},
+          ${String(
+            title || "XAUUSD Signal"
+          ).slice(0, 120)},
+          ${String(body).slice(0, 5000)}
+        )
+      `;
+
+      res.json({
+        ok: true
+      });
+
+    } catch (error) {
+      console.error(
+        "SIGNAL ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Could not create signal."
       });
     }
-
-    db.signals.push({
-      id: createId(),
-
-      title: String(
-        title ||
-          "XAUUSD Signal"
-      ).slice(0, 120),
-
-      body: String(body)
-        .slice(0, 5000),
-
-      createdAt:
-        new Date().toISOString()
-    });
-
-    saveDB();
-
-    res.json({
-      ok: true
-    });
   }
 );
 
@@ -879,19 +1136,27 @@ app.post(
 app.delete(
   "/api/admin/signals/:id",
   requireAdmin,
-  (req, res) => {
-    db.signals =
-      db.signals.filter(
-        x =>
-          x.id !==
-          req.params.id
+  async (req, res) => {
+    try {
+      await sql`
+        DELETE FROM signals
+        WHERE id = ${req.params.id}
+      `;
+
+      res.json({
+        ok: true
+      });
+
+    } catch (error) {
+      console.error(
+        "DELETE SIGNAL ERROR:",
+        error
       );
 
-    saveDB();
-
-    res.json({
-      ok: true
-    });
+      res.status(500).json({
+        error: "Could not delete signal."
+      });
+    }
   }
 );
 
