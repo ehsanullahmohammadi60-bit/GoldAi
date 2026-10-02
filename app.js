@@ -1,1140 +1,2733 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>GoldAI Admin</title>
+const $ = (id) => document.getElementById(id);
 
-  <link rel="stylesheet" href="styles.css">
+let currentUser = null;
+let selectedChartFile = null;
+let selectedTimeframe = "1m";
+let selectedPaymentMethod = "hesabpay";
 
-  <style>
-    body {
-      min-height: 100vh;
-    }
+let accessPollTimer = null;
+let paymentSubmitting = false;
+let analysisSubmitting = false;
+let supportSubmitting = false;
 
-    main {
-      width: min(1100px, calc(100% - 24px));
-      margin: 30px auto;
-    }
 
-    .hidden {
-      display: none !important;
-    }
+/* =========================================================
+   TRANSLATIONS
+========================================================= */
 
-    .admin-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 15px;
-      margin-bottom: 20px;
-    }
+const translations = {
 
-    .admin-header h1 {
-      margin: 0;
-    }
+  fa: {
+    heroPill: "XAUUSD • تحلیل هوشمند نمودار",
+    heroTitle: "تحلیل حرفه‌ای طلا",
+    heroText: "نمودار XAUUSD خود را آپلود کنید تا GoldAI ساختار قابل مشاهده بازار را تحلیل کند.",
+    hesabpayActivation: "فعال‌سازی با حساب‌پی",
+    binanceActivation: "فعال‌سازی با Binance Pay",
+    chartImageAnalysis: "تحلیل تصویر نمودار",
 
-    .admin-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-bottom: 20px;
-    }
+    login: "ورود",
+    createAccount: "ساخت حساب",
+    email: "ایمیل",
+    password: "رمز عبور",
+    password6: "رمز عبور (حداقل ۶ کاراکتر)",
+    fullName: "نام کامل",
 
-    .stat {
-      padding: 18px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,.08);
-      background: rgba(255,255,255,.04);
-    }
+    goldAiMember: "عضو GOLD AI",
+    memberDashboard: "داشبورد اعضا",
+    logout: "خروج",
 
-    .stat strong {
-      display: block;
-      font-size: 28px;
-      margin-top: 6px;
-    }
+    membership: "عضویت",
+    activateAccess: "فعال‌سازی دسترسی",
+    paymentDescription: "مبلغ را پرداخت کنید و سپس رسید پرداخت خود را ارسال کنید. دسترسی شما تا زمان تأیید توسط مدیر قفل خواهد بود.",
+    transactionReference: "شماره تراکنش / Reference",
+    submitReceipt: "ارسال رسید برای بررسی",
 
-    .card {
-      padding: 16px;
-      margin-bottom: 12px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,.08);
-      background: rgba(255,255,255,.035);
-    }
+    goldAiVision: "GOLD AI VISION",
+    xauusdAnalyzer: "تحلیلگر هوشمند نمودار XAUUSD",
+    analyzerDescription: "ابتدا تایم‌فریم مورد نظر را انتخاب کنید، سپس یک اسکرین‌شات واضح از نمودار XAUUSD همان تایم‌فریم آپلود کنید.",
+    selectTimeframe: "انتخاب تایم‌فریم تحلیل",
+    oneMinute: "۱ دقیقه",
+    fiveMinutes: "۵ دقیقه",
+    fifteenMinutes: "۱۵ دقیقه",
+    chooseChart: "انتخاب نمودار XAUUSD",
+    chartFormats: "PNG، JPG، WEBP یا GIF • حداکثر ۵ مگابایت",
+    analyzeChart: "تحلیل نمودار با هوش مصنوعی",
 
-    .card small {
-      display: block;
-      opacity: .7;
-      margin-top: 5px;
-    }
+    aiSignal: "سیگنال هوش مصنوعی",
+    symbol: "نماد",
+    timeframe: "تایم‌فریم",
+    entry: "ورود",
+    stopLoss: "حد ضرر",
+    confidence: "میزان اطمینان",
+    technicalAnalysis: "تحلیل تکنیکال",
+    riskWarning: "هشدار ریسک",
 
-    .card p {
-      line-height: 1.7;
-    }
+    history: "تاریخچه",
+    previousAnalyses: "تحلیل‌های قبلی",
 
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 12px;
-    }
+    privateFeed: "فید خصوصی",
+    privateSignals: "سیگنال‌های خصوصی XAUUSD",
 
-    textarea {
-      width: 100%;
-      min-height: 140px;
-      resize: vertical;
-    }
+    support: "پشتیبانی",
+    websiteSupport: "پشتیبانی سایت",
+    writeMessage: "پیام خود را بنویسید...",
+    sendSupport: "ارسال پیام پشتیبانی",
 
-    input,
-    textarea {
-      box-sizing: border-box;
-    }
+    footerTitle: "GoldAI • سرویس تحلیل هوشمند XAUUSD",
+    footerWarning: "معامله‌گری دارای ریسک بازار است. تحلیل هوش مصنوعی سود را تضمین نمی‌کند."
+  },
 
-    .section-title {
-      margin-top: 0;
-    }
+  en: {
+    heroPill: "XAUUSD • AI Chart Analysis",
+    heroTitle: "Professional Gold Analysis",
+    heroText: "Upload your XAUUSD chart and GoldAI will analyze the visible market structure.",
+    hesabpayActivation: "Activation with HesabPay",
+    binanceActivation: "Activation with Binance Pay",
+    chartImageAnalysis: "Chart image analysis",
 
-    .status-approved {
-      color: #35d07f;
-      font-weight: 700;
-    }
+    login: "Login",
+    createAccount: "Create Account",
+    email: "Email",
+    password: "Password",
+    password6: "Password (minimum 6 characters)",
+    fullName: "Full name",
 
-    .status-pending {
-      color: #f5b942;
-      font-weight: 700;
-    }
+    goldAiMember: "GOLD AI MEMBER",
+    memberDashboard: "Member Dashboard",
+    logout: "Logout",
 
-    .status-rejected {
-      color: #ff6565;
-      font-weight: 700;
-    }
+    membership: "MEMBERSHIP",
+    activateAccess: "Activate Access",
+    paymentDescription: "Complete the payment and submit your payment receipt. Your access remains locked until an administrator approves your payment.",
+    transactionReference: "Transaction / Reference",
+    submitReceipt: "Submit Receipt",
 
-    .receipt {
-      display: inline-block;
-      margin-top: 8px;
-      font-weight: 700;
-    }
+    goldAiVision: "GOLD AI VISION",
+    xauusdAnalyzer: "XAUUSD AI Chart Analyzer",
+    analyzerDescription: "Select your timeframe first, then upload a clear XAUUSD chart screenshot for the same timeframe.",
+    selectTimeframe: "Select Analysis Timeframe",
+    oneMinute: "1 Minute",
+    fiveMinutes: "5 Minutes",
+    fifteenMinutes: "15 Minutes",
+    chooseChart: "Choose XAUUSD Chart",
+    chartFormats: "PNG, JPG, WEBP or GIF • Maximum 5 MB",
+    analyzeChart: "Analyze Chart with AI",
 
-    .empty {
-      opacity: .65;
-      padding: 12px 0;
-    }
+    aiSignal: "AI SIGNAL",
+    symbol: "Symbol",
+    timeframe: "Timeframe",
+    entry: "Entry",
+    stopLoss: "Stop Loss",
+    confidence: "Confidence",
+    technicalAnalysis: "Technical Analysis",
+    riskWarning: "Risk Warning",
 
-    @media (max-width: 750px) {
-      .admin-grid {
-        grid-template-columns: 1fr;
+    history: "HISTORY",
+    previousAnalyses: "Previous Analyses",
+
+    privateFeed: "PRIVATE FEED",
+    privateSignals: "Private XAUUSD Signals",
+
+    support: "SUPPORT",
+    websiteSupport: "Website Support",
+    writeMessage: "Write your message...",
+    sendSupport: "Send Support Message",
+
+    footerTitle: "GoldAI • AI XAUUSD Analysis Service",
+    footerWarning: "Trading involves market risk. AI analysis does not guarantee profit."
+  },
+
+  ar: {
+    heroPill: "XAUUSD • تحليل الرسم البياني بالذكاء الاصطناعي",
+    heroTitle: "تحليل احترافي للذهب",
+    heroText: "ارفع مخطط XAUUSD الخاص بك وسيقوم GoldAI بتحليل هيكل السوق الظاهر.",
+    hesabpayActivation: "التفعيل عبر HesabPay",
+    binanceActivation: "التفعيل عبر Binance Pay",
+    chartImageAnalysis: "تحليل صورة الرسم البياني",
+
+    login: "تسجيل الدخول",
+    createAccount: "إنشاء حساب",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    password6: "كلمة المرور (6 أحرف على الأقل)",
+    fullName: "الاسم الكامل",
+
+    goldAiMember: "عضو GOLD AI",
+    memberDashboard: "لوحة الأعضاء",
+    logout: "تسجيل الخروج",
+
+    membership: "العضوية",
+    activateAccess: "تفعيل الوصول",
+    paymentDescription: "أكمل الدفع ثم أرسل إيصال الدفع. سيبقى الوصول مقفلاً حتى تتم الموافقة على الدفع من قبل الإدارة.",
+    transactionReference: "رقم المعاملة / المرجع",
+    submitReceipt: "إرسال الإيصال",
+
+    goldAiVision: "GOLD AI VISION",
+    xauusdAnalyzer: "محلل XAUUSD بالذكاء الاصطناعي",
+    analyzerDescription: "اختر الإطار الزمني أولاً، ثم ارفع صورة واضحة لمخطط XAUUSD لنفس الإطار الزمني.",
+    selectTimeframe: "اختر الإطار الزمني للتحليل",
+    oneMinute: "دقيقة واحدة",
+    fiveMinutes: "5 دقائق",
+    fifteenMinutes: "15 دقيقة",
+    chooseChart: "اختر مخطط XAUUSD",
+    chartFormats: "PNG، JPG، WEBP أو GIF • الحد الأقصى 5 ميجابايت",
+    analyzeChart: "تحليل المخطط بالذكاء الاصطناعي",
+
+    aiSignal: "إشارة الذكاء الاصطناعي",
+    symbol: "الرمز",
+    timeframe: "الإطار الزمني",
+    entry: "الدخول",
+    stopLoss: "وقف الخسارة",
+    confidence: "درجة الثقة",
+    technicalAnalysis: "التحليل الفني",
+    riskWarning: "تحذير المخاطر",
+
+    history: "السجل",
+    previousAnalyses: "التحليلات السابقة",
+
+    privateFeed: "التغذية الخاصة",
+    privateSignals: "إشارات XAUUSD الخاصة",
+
+    support: "الدعم",
+    websiteSupport: "دعم الموقع",
+    writeMessage: "اكتب رسالتك...",
+    sendSupport: "إرسال رسالة الدعم",
+
+    footerTitle: "GoldAI • خدمة تحليل XAUUSD بالذكاء الاصطناعي",
+    footerWarning: "التداول ينطوي على مخاطر السوق. تحليل الذكاء الاصطناعي لا يضمن الربح."
+  }
+
+};
+
+
+/* =========================================================
+   LANGUAGE
+========================================================= */
+
+function getLanguage() {
+
+  const saved =
+    localStorage.getItem(
+      "goldai_language"
+    );
+
+  if (
+    saved &&
+    translations[saved]
+  ) {
+    return saved;
+  }
+
+  return "fa";
+}
+
+
+function setLanguage(language) {
+
+  if (
+    !translations[language]
+  ) {
+    language = "fa";
+  }
+
+  localStorage.setItem(
+    "goldai_language",
+    language
+  );
+
+  const html =
+    document.documentElement;
+
+  html.lang =
+    language;
+
+  html.dir =
+    language === "en"
+      ? "ltr"
+      : "rtl";
+
+  const select =
+    $("lang");
+
+  if (select) {
+    select.value =
+      language;
+  }
+
+  document
+    .querySelectorAll(
+      "[data-i18n]"
+    )
+    .forEach(
+      (element) => {
+
+        const key =
+          element.dataset.i18n;
+
+        if (
+          translations[language][key] !==
+          undefined
+        ) {
+
+          element.textContent =
+            translations[language][key];
+
+        }
+
       }
+    );
 
-      .admin-header {
-        align-items: flex-start;
-        flex-direction: column;
+
+  document
+    .querySelectorAll(
+      "[data-i18n-placeholder]"
+    )
+    .forEach(
+      (element) => {
+
+        const key =
+          element.dataset.i18nPlaceholder;
+
+        if (
+          translations[language][key] !==
+          undefined
+        ) {
+
+          element.placeholder =
+            translations[language][key];
+
+        }
+
       }
+    );
+
+
+  renderPaymentDetails();
+
+  if (currentUser) {
+    renderStatus();
+  }
+
+}
+
+
+function currentLanguage() {
+
+  return getLanguage();
+
+}
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function textValue(
+  value,
+  fallback = "—"
+) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    String(value).trim() === ""
+  ) {
+    return fallback;
+  }
+
+  return String(value);
+}
+
+
+function escapeHtml(value) {
+
+  return String(
+    value ?? ""
+  ).replace(
+    /[&<>"']/g,
+    (character) => {
+
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[character];
+
     }
-  </style>
-</head>
+  );
 
-<body>
-
-<main>
-
-  <!-- LOGIN -->
-  <section id="login" class="panel">
-
-    <h1>GoldAI Admin</h1>
-
-    <p>
-      Secure administrator access.
-    </p>
-
-    <input
-      id="ap"
-      type="password"
-      placeholder="Admin password"
-      autocomplete="current-password"
-    >
-
-    <button id="al">
-      Login
-    </button>
-
-    <p id="am" class="msg"></p>
-
-  </section>
+}
 
 
-  <!-- ADMIN DASHBOARD -->
-  <section id="admin" class="hidden">
+function formatDate(value) {
 
-    <div class="admin-header">
+  if (!value) {
+    return "";
+  }
 
-      <div>
-        <h1>GoldAI Admin Dashboard</h1>
-        <p>
-          Manage users, payments and XAUUSD signals.
-        </p>
-      </div>
+  const date =
+    new Date(value);
 
-      <button
-        id="logout"
-        class="ghost"
-      >
-        Logout
-      </button>
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return String(value);
+  }
 
-    </div>
+  return date.toLocaleString(
+    currentLanguage() === "fa"
+      ? "fa-AF"
+      : currentLanguage() === "ar"
+        ? "ar"
+        : "en-US"
+  );
 
-
-    <!-- STATISTICS -->
-    <div class="admin-grid">
-
-      <div class="stat">
-        <span>Total Users</span>
-        <strong id="totalUsers">0</strong>
-      </div>
-
-      <div class="stat">
-        <span>Pending Payments</span>
-        <strong id="pendingPayments">0</strong>
-      </div>
-
-      <div class="stat">
-        <span>Approved Users</span>
-        <strong id="approvedUsers">0</strong>
-      </div>
-
-    </div>
+}
 
 
-    <!-- PAYMENTS -->
-    <div class="panel">
+function timeframeLabel(value) {
 
-      <h2 class="section-title">
-        Payment Requests
-      </h2>
+  const labels = {
+    "1m": "1M",
+    "5m": "5M",
+    "15m": "15M"
+  };
 
-      <p>
-        Review the payment receipt before approving access.
-      </p>
+  return (
+    labels[value] ||
+    value ||
+    "—"
+  );
 
-      <div id="payments"></div>
-
-    </div>
-
-
-    <!-- USERS -->
-    <div class="panel">
-
-      <h2 class="section-title">
-        Users
-      </h2>
-
-      <div id="users"></div>
-
-    </div>
+}
 
 
-    <!-- CREATE SIGNAL -->
-    <div class="panel">
+/* =========================================================
+   API
+========================================================= */
 
-      <h2 class="section-title">
-        Publish XAUUSD Signal
-      </h2>
+async function api(
+  url,
+  options = {}
+) {
 
-      <input
-        id="st"
-        type="text"
-        placeholder="Signal title e.g. XAUUSD SELL NOW"
-      >
+  const response =
+    await fetch(
+      url,
+      {
+        credentials: "include",
+        ...options
+      }
+    );
 
-      <textarea
-        id="sb"
-        placeholder="Example:
+  let data = {};
 
-XAUUSD SELL 4395
+  try {
 
-TP1 4393
-TP2 4391
-TP3 4389
-TP4 4387
-TP5 4385
+    data =
+      await response.json();
 
-SL 4405"
-      ></textarea>
+  } catch (_) {
 
-      <button id="publish">
-        Publish Signal
-      </button>
+    data = {};
 
-      <p id="pm" class="msg"></p>
+  }
 
-    </div>
-
-
-    <!-- PUBLISHED SIGNALS -->
-    <div class="panel">
-
-      <h2 class="section-title">
-        Published Signals
-      </h2>
-
-      <div id="signals"></div>
-
-    </div>
-
-  </section>
-
-</main>
-
-
-<script>
-
-  const $ = (id) =>
-    document.getElementById(id);
-
-
-  /* =========================================================
-     API HELPER
-  ========================================================= */
-
-  async function api(
-    url,
-    options = {}
+  if (
+    !response.ok
   ) {
 
-    const response =
-      await fetch(
-        url,
-        {
-          credentials: "include",
-          ...options
-        }
-      );
+    throw new Error(
+      data.error ||
+      "Request failed."
+    );
 
-    let data = {};
+  }
 
-    try {
+  return data;
 
-      data =
-        await response.json();
+}
 
-    } catch (_) {
 
-      data = {};
+/* =========================================================
+   AUTH TABS
+========================================================= */
+
+function showAuthTab(
+  tab
+) {
+
+  const loginForm =
+    $("loginForm");
+
+  const registerForm =
+    $("registerForm");
+
+  document
+    .querySelectorAll(
+      ".tab[data-tab]"
+    )
+    .forEach(
+      (button) => {
+
+        button.classList.toggle(
+          "active",
+          button.dataset.tab ===
+            tab
+        );
+
+      }
+    );
+
+
+  if (loginForm) {
+
+    loginForm.classList.toggle(
+      "hidden",
+      tab !== "login"
+    );
+
+  }
+
+
+  if (registerForm) {
+
+    registerForm.classList.toggle(
+      "hidden",
+      tab !== "register"
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   AUTH MESSAGE
+========================================================= */
+
+function authMessage(
+  message
+) {
+
+  const element =
+    $("authMsg");
+
+  if (element) {
+    element.textContent =
+      message || "";
+  }
+
+}
+
+
+/* =========================================================
+   PAYMENT DETAILS
+========================================================= */
+
+function renderPaymentDetails() {
+
+  const details =
+    $("payDetails");
+
+  if (!details) {
+    return;
+  }
+
+  if (
+    selectedPaymentMethod ===
+    "binance"
+  ) {
+
+    details.innerHTML = `
+      <strong>Binance Pay</strong>
+      <br>
+      Amount: <strong>4 USD / USDT</strong>
+      <br>
+      Please complete the payment using the Binance Pay details provided by the administrator.
+    `;
+
+  } else {
+
+    details.innerHTML = `
+      <strong>HesabPay</strong>
+      <br>
+      Amount: <strong>240 AFN</strong>
+      <br>
+      Please complete the payment using the HesabPay details provided by the administrator.
+    `;
+
+  }
+
+}
+
+
+/* =========================================================
+   RENDER STATUS
+========================================================= */
+
+function renderStatus() {
+
+  const status =
+    $("status");
+
+  if (!status) {
+    return;
+  }
+
+  const language =
+    currentLanguage();
+
+  if (
+    currentUser?.approved
+  ) {
+
+    if (language === "en") {
+
+      status.textContent =
+        "✓ Your account is approved. All member features are available.";
+
+    } else if (
+      language === "ar"
+    ) {
+
+      status.textContent =
+        "✓ تم اعتماد حسابك. جميع ميزات الأعضاء متاحة.";
+
+    } else {
+
+      status.textContent =
+        "✓ حساب شما تأیید شده است. تمام امکانات اعضا فعال است.";
 
     }
 
-    if (!response.ok) {
+    status.className =
+      "statusApproved";
+
+  } else {
+
+    if (language === "en") {
+
+      status.textContent =
+        "Access locked — payment approval is required.";
+
+    } else if (
+      language === "ar"
+    ) {
+
+      status.textContent =
+        "الوصول مقفل — يجب اعتماد الدفع أولاً.";
+
+    } else {
+
+      status.textContent =
+        "دسترسی قفل است — ابتدا پرداخت شما باید تأیید شود.";
+
+    }
+
+    status.className =
+      "statusLocked";
+
+  }
+
+}
+
+
+/* =========================================================
+   LOCKED STATE
+========================================================= */
+
+function renderLockedState(
+  paymentStatus = null
+) {
+
+  const payPanel =
+    $("payPanel");
+
+  const approvedNotice =
+    $("approvedNotice");
+
+  const aiPanel =
+    $("aiPanel");
+
+  const historyPanel =
+    $("historyPanel");
+
+  const signalsPanel =
+    $("signalsPanel");
+
+  const supportPanel =
+    $("supportPanel");
+
+  if (payPanel) {
+    payPanel.classList.remove(
+      "hidden"
+    );
+  }
+
+  if (approvedNotice) {
+    approvedNotice.classList.add(
+      "hidden"
+    );
+  }
+
+  [
+    aiPanel,
+    historyPanel,
+    signalsPanel,
+    supportPanel
+  ].forEach(
+    (element) => {
+
+      if (element) {
+        element.classList.add(
+          "hidden"
+        );
+      }
+
+    }
+  );
+
+
+  const lockNotice =
+    $("paymentLockNotice");
+
+  if (lockNotice) {
+
+    const language =
+      currentLanguage();
+
+    let message = "";
+
+    if (
+      paymentStatus ===
+      "pending"
+    ) {
+
+      if (
+        language === "en"
+      ) {
+
+        message =
+          "Your payment receipt has been submitted and is waiting for administrator approval.";
+
+      } else if (
+        language === "ar"
+      ) {
+
+        message =
+          "تم إرسال إيصال الدفع الخاص بك وهو بانتظار موافقة الإدارة.";
+
+      } else {
+
+        message =
+          "رسید پرداخت شما ارسال شده و منتظر تأیید مدیر است.";
+
+      }
+
+    } else if (
+      paymentStatus ===
+      "rejected"
+    ) {
+
+      if (
+        language === "en"
+      ) {
+
+        message =
+          "Your previous payment request was rejected. Please submit a new valid payment receipt.";
+
+      } else if (
+        language === "ar"
+      ) {
+
+        message =
+          "تم رفض طلب الدفع السابق. يرجى إرسال إيصال دفع صالح جديد.";
+
+      } else {
+
+        message =
+          "درخواست پرداخت قبلی شما رد شده است. لطفاً رسید معتبر جدید ارسال کنید.";
+
+      }
+
+    } else {
+
+      if (
+        language === "en"
+      ) {
+
+        message =
+          "Complete the payment and submit your receipt. Your account will remain locked until approval.";
+
+      } else if (
+        language === "ar"
+      ) {
+
+        message =
+          "أكمل الدفع وأرسل الإيصال. سيبقى حسابك مقفلاً حتى الموافقة.";
+
+      } else {
+
+        message =
+          "پرداخت را انجام دهید و رسید را ارسال کنید. حساب شما تا زمان تأیید قفل خواهد بود.";
+
+      }
+
+    }
+
+    lockNotice.textContent =
+      message;
+
+  }
+
+}
+
+
+/* =========================================================
+   APPROVED STATE
+========================================================= */
+
+function renderApprovedState() {
+
+  const payPanel =
+    $("payPanel");
+
+  const approvedNotice =
+    $("approvedNotice");
+
+  const aiPanel =
+    $("aiPanel");
+
+  const historyPanel =
+    $("historyPanel");
+
+  const signalsPanel =
+    $("signalsPanel");
+
+  const supportPanel =
+    $("supportPanel");
+
+
+  /*
+    Approved users must never see
+    payment methods again.
+  */
+
+  if (payPanel) {
+    payPanel.classList.add(
+      "hidden"
+    );
+  }
+
+  if (approvedNotice) {
+    approvedNotice.classList.remove(
+      "hidden"
+    );
+  }
+
+  if (aiPanel) {
+    aiPanel.classList.remove(
+      "hidden"
+    );
+  }
+
+  if (historyPanel) {
+    historyPanel.classList.remove(
+      "hidden"
+    );
+  }
+
+  if (signalsPanel) {
+    signalsPanel.classList.remove(
+      "hidden"
+    );
+  }
+
+  if (supportPanel) {
+    supportPanel.classList.remove(
+      "hidden"
+    );
+  }
+
+
+  const notice =
+    $("approvedNoticeText");
+
+  if (notice) {
+
+    const language =
+      currentLanguage();
+
+    if (
+      language === "en"
+    ) {
+
+      notice.textContent =
+        "Your payment has been approved. Payment options are no longer displayed because your account already has access.";
+
+    } else if (
+      language === "ar"
+    ) {
+
+      notice.textContent =
+        "تمت الموافقة على دفعتك. لن تظهر خيارات الدفع مرة أخرى لأن حسابك لديه صلاحية الوصول.";
+
+    } else {
+
+      notice.textContent =
+        "پرداخت شما تأیید شده است. چون حساب شما دسترسی دارد، گزینه‌های پرداخت دیگر نمایش داده نمی‌شوند.";
+
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   ACCESS
+========================================================= */
+
+async function refreshAccess() {
+
+  if (!currentUser) {
+    return;
+  }
+
+  try {
+
+    const data =
+      await api(
+        "/api/access"
+      );
+
+
+    if (
+      data.user
+    ) {
+
+      currentUser =
+        data.user;
+
+    }
+
+
+    currentUser.approved =
+      Boolean(
+        data.approved ??
+        currentUser.approved
+      );
+
+
+    renderStatus();
+
+
+    if (
+      currentUser.approved
+    ) {
+
+      renderApprovedState();
+
+      stopAccessPolling();
+
+      await loadHistory();
+      await loadSignals();
+
+    } else {
+
+      renderLockedState(
+        data.paymentStatus
+      );
+
+      startAccessPolling();
+
+    }
+
+  } catch (error) {
+
+    console.error(
+      "ACCESS ERROR",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   ACCESS POLLING
+========================================================= */
+
+function startAccessPolling() {
+
+  if (
+    accessPollTimer
+  ) {
+    return;
+  }
+
+  accessPollTimer =
+    setInterval(
+      async () => {
+
+        if (
+          !currentUser ||
+          currentUser.approved
+        ) {
+
+          stopAccessPolling();
+          return;
+
+        }
+
+        await refreshAccess();
+
+      },
+      15000
+    );
+
+}
+
+
+function stopAccessPolling() {
+
+  if (
+    accessPollTimer
+  ) {
+
+    clearInterval(
+      accessPollTimer
+    );
+
+    accessPollTimer =
+      null;
+
+  }
+
+}
+
+
+/* =========================================================
+   LOGIN
+========================================================= */
+
+async function login(
+  event
+) {
+
+  event.preventDefault();
+
+  authMessage("");
+
+  const email =
+    $("loginEmail")
+      ?.value
+      .trim();
+
+  const password =
+    $("loginPass")
+      ?.value || "";
+
+
+  if (
+    !email ||
+    !password
+  ) {
+
+    authMessage(
+      currentLanguage() === "en"
+        ? "Email and password are required."
+        : currentLanguage() === "ar"
+          ? "البريد الإلكتروني وكلمة المرور مطلوبان."
+          : "ایمیل و رمز عبور الزامی است."
+    );
+
+    return;
+
+  }
+
+
+  const button =
+    $("loginForm")
+      ?.querySelector(
+        "button[type='submit']"
+      );
+
+  if (button) {
+    button.disabled =
+      true;
+  }
+
+
+  try {
+
+    const data =
+      await api(
+        "/api/login",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              email,
+              password
+            })
+        }
+      );
+
+
+    currentUser =
+      data.user ||
+      null;
+
+
+    if (!currentUser) {
 
       throw new Error(
-        data.error ||
-        "Request failed."
+        "Login succeeded but user data was not returned."
       );
 
     }
 
-    return data;
+
+    authMessage("");
+
+    await showDashboard();
+
+    await refreshAccess();
+
+
+  } catch (error) {
+
+    authMessage(
+      error.message
+    );
+
+  } finally {
+
+    if (button) {
+      button.disabled =
+        false;
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   REGISTER
+========================================================= */
+
+async function register(
+  event
+) {
+
+  event.preventDefault();
+
+  authMessage("");
+
+  const name =
+    $("regName")
+      ?.value
+      .trim();
+
+  const email =
+    $("regEmail")
+      ?.value
+      .trim();
+
+  const password =
+    $("regPass")
+      ?.value || "";
+
+
+  if (
+    !name ||
+    !email ||
+    !password
+  ) {
+
+    authMessage(
+      currentLanguage() === "en"
+        ? "All fields are required."
+        : currentLanguage() === "ar"
+          ? "جميع الحقول مطلوبة."
+          : "تمام بخش‌ها الزامی است."
+    );
+
+    return;
 
   }
 
 
-  /* =========================================================
-     ESCAPE HTML
-  ========================================================= */
+  if (
+    password.length < 6
+  ) {
 
-  function esc(value) {
+    authMessage(
+      currentLanguage() === "en"
+        ? "Password must be at least 6 characters."
+        : currentLanguage() === "ar"
+          ? "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل."
+          : "رمز عبور باید حداقل ۶ کاراکتر باشد."
+    );
 
-    return String(
-      value ?? ""
-    ).replace(
-      /[&<>"']/g,
-      function (char) {
+    return;
 
-        return {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        }[char];
+  }
+
+
+  const button =
+    $("registerForm")
+      ?.querySelector(
+        "button[type='submit']"
+      );
+
+  if (button) {
+    button.disabled =
+      true;
+  }
+
+
+  try {
+
+    const data =
+      await api(
+        "/api/register",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              name,
+              email,
+              password
+            })
+        }
+      );
+
+
+    currentUser =
+      data.user ||
+      null;
+
+
+    if (!currentUser) {
+
+      throw new Error(
+        "Account created but user data was not returned."
+      );
+
+    }
+
+
+    authMessage("");
+
+    await showDashboard();
+
+    await refreshAccess();
+
+
+  } catch (error) {
+
+    authMessage(
+      error.message
+    );
+
+  } finally {
+
+    if (button) {
+      button.disabled =
+        false;
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+async function logout() {
+
+  stopAccessPolling();
+
+  try {
+
+    await api(
+      "/api/logout",
+      {
+        method: "POST"
+      }
+    );
+
+  } catch (_) {}
+
+  currentUser =
+    null;
+
+  selectedChartFile =
+    null;
+
+  const dashboard =
+    $("dashboard");
+
+  const auth =
+    $("auth");
+
+  if (dashboard) {
+    dashboard.classList.add(
+      "hidden"
+    );
+  }
+
+  if (auth) {
+    auth.classList.remove(
+      "hidden"
+    );
+  }
+
+  showAuthTab("login");
+
+}
+
+
+/* =========================================================
+   SHOW DASHBOARD
+========================================================= */
+
+async function showDashboard() {
+
+  const auth =
+    $("auth");
+
+  const dashboard =
+    $("dashboard");
+
+  if (auth) {
+    auth.classList.add(
+      "hidden"
+    );
+  }
+
+  if (dashboard) {
+    dashboard.classList.remove(
+      "hidden"
+    );
+  }
+
+  renderStatus();
+
+}
+
+
+/* =========================================================
+   PAYMENT METHOD
+========================================================= */
+
+function selectPaymentMethod(
+  method
+) {
+
+  if (
+    currentUser?.approved
+  ) {
+    return;
+  }
+
+  if (
+    method !== "hesabpay" &&
+    method !== "binance"
+  ) {
+    return;
+  }
+
+  selectedPaymentMethod =
+    method;
+
+
+  document
+    .querySelectorAll(
+      ".pay[data-method]"
+    )
+    .forEach(
+      (button) => {
+
+        button.classList.toggle(
+          "active",
+          button.dataset.method ===
+            method
+        );
 
       }
     );
 
+
+  renderPaymentDetails();
+
+}
+
+
+/* =========================================================
+   PAYMENT
+========================================================= */
+
+async function submitPayment(
+  event
+) {
+
+  event.preventDefault();
+
+  if (
+    paymentSubmitting
+  ) {
+    return;
+  }
+
+  if (
+    !currentUser
+  ) {
+    return;
+  }
+
+  if (
+    currentUser.approved
+  ) {
+
+    return;
+
   }
 
 
-  /* =========================================================
-     DATE
-  ========================================================= */
+  const reference =
+    $("reference")
+      ?.value
+      .trim();
 
-  function formatDate(value) {
+  const receipt =
+    $("receipt")
+      ?.files?.[0];
 
-    if (!value) {
-      return "-";
+
+  if (!reference) {
+
+    $("payMsg").textContent =
+      currentLanguage() === "en"
+        ? "Payment reference is required."
+        : currentLanguage() === "ar"
+          ? "رقم مرجع الدفع مطلوب."
+          : "شماره تراکنش الزامی است.";
+
+    return;
+
+  }
+
+
+  if (!receipt) {
+
+    $("payMsg").textContent =
+      currentLanguage() === "en"
+        ? "Please select your payment receipt."
+        : currentLanguage() === "ar"
+          ? "يرجى اختيار إيصال الدفع."
+          : "لطفاً رسید پرداخت خود را انتخاب کنید.";
+
+    return;
+
+  }
+
+
+  const allowedTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif"
+  ];
+
+
+  if (
+    !allowedTypes.includes(
+      receipt.type
+    )
+  ) {
+
+    $("payMsg").textContent =
+      currentLanguage() === "en"
+        ? "Only PNG, JPG, WEBP and GIF images are allowed."
+        : currentLanguage() === "ar"
+          ? "يسمح فقط بصور PNG وJPG وWEBP وGIF."
+          : "فقط تصاویر PNG، JPG، WEBP و GIF مجاز است.";
+
+    return;
+
+  }
+
+
+  if (
+    receipt.size >
+    5 * 1024 * 1024
+  ) {
+
+    $("payMsg").textContent =
+      currentLanguage() === "en"
+        ? "The receipt must be smaller than 5 MB."
+        : currentLanguage() === "ar"
+          ? "يجب أن يكون الإيصال أقل من 5 ميجابايت."
+          : "حجم رسید باید کمتر از ۵ مگابایت باشد.";
+
+    return;
+
+  }
+
+
+  paymentSubmitting =
+    true;
+
+
+  const button =
+    $("paymentForm")
+      ?.querySelector(
+        "button[type='submit']"
+      );
+
+  if (button) {
+    button.disabled =
+      true;
+  }
+
+
+  $("payMsg").textContent =
+    currentLanguage() === "en"
+      ? "Submitting payment receipt..."
+      : currentLanguage() === "ar"
+        ? "جارٍ إرسال إيصال الدفع..."
+        : "در حال ارسال رسید پرداخت...";
+
+
+  try {
+
+    const formData =
+      new FormData();
+
+    formData.append(
+      "method",
+      selectedPaymentMethod
+    );
+
+    formData.append(
+      "reference",
+      reference
+    );
+
+    formData.append(
+      "receipt",
+      receipt
+    );
+
+
+    const data =
+      await api(
+        "/api/payment",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+
+    $("payMsg").textContent =
+      data.message ||
+      (
+        currentLanguage() === "en"
+          ? "Payment receipt submitted successfully."
+          : currentLanguage() === "ar"
+            ? "تم إرسال إيصال الدفع بنجاح."
+            : "رسید پرداخت با موفقیت ارسال شد."
+      );
+
+
+    await refreshAccess();
+
+
+  } catch (error) {
+
+    $("payMsg").textContent =
+      error.message;
+
+  } finally {
+
+    paymentSubmitting =
+      false;
+
+    if (button) {
+      button.disabled =
+        false;
     }
 
-    const date =
-      new Date(value);
+  }
+
+}
+
+
+/* =========================================================
+   TIMEFRAME
+========================================================= */
+
+function selectTimeframe(
+  timeframe
+) {
+
+  if (
+    !["1m", "5m", "15m"]
+      .includes(timeframe)
+  ) {
+    return;
+  }
+
+  selectedTimeframe =
+    timeframe;
+
+
+  const hidden =
+    $("selectedTimeframe");
+
+  if (hidden) {
+    hidden.value =
+      timeframe;
+  }
+
+
+  document
+    .querySelectorAll(
+      ".timeframeOption"
+    )
+    .forEach(
+      (button) => {
+
+        button.classList.toggle(
+          "active",
+          button.dataset.timeframe ===
+            timeframe
+        );
+
+      }
+    );
+
+}
+
+
+/* =========================================================
+   CHART FILE
+========================================================= */
+
+function handleChartFile(
+  event
+) {
+
+  const file =
+    event.target.files?.[0];
+
+
+  selectedChartFile =
+    null;
+
+
+  if (!file) {
+    return;
+  }
+
+
+  const allowedTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif"
+  ];
+
+
+  if (
+    !allowedTypes.includes(
+      file.type
+    )
+  ) {
+
+    $("chartMsg").textContent =
+      currentLanguage() === "en"
+        ? "Only PNG, JPG, WEBP and GIF images are allowed."
+        : currentLanguage() === "ar"
+          ? "يسمح فقط بصور PNG وJPG وWEBP وGIF."
+          : "فقط تصاویر PNG، JPG، WEBP و GIF مجاز است.";
+
+    event.target.value = "";
+
+    return;
+
+  }
+
+
+  if (
+    file.size >
+    5 * 1024 * 1024
+  ) {
+
+    $("chartMsg").textContent =
+      currentLanguage() === "en"
+        ? "Chart image must be smaller than 5 MB."
+        : currentLanguage() === "ar"
+          ? "يجب أن تكون صورة المخطط أقل من 5 ميجابايت."
+          : "حجم تصویر نمودار باید کمتر از ۵ مگابایت باشد.";
+
+    event.target.value = "";
+
+    return;
+
+  }
+
+
+  selectedChartFile =
+    file;
+
+
+  const preview =
+    $("chartPreview");
+
+  const wrap =
+    $("chartPreviewWrap");
+
+
+  if (
+    preview &&
+    wrap
+  ) {
+
+    const url =
+      URL.createObjectURL(
+        file
+      );
+
+    preview.src =
+      url;
+
+    wrap.classList.remove(
+      "hidden"
+    );
+
+    preview.onload =
+      () => {
+
+        URL.revokeObjectURL(
+          url
+        );
+
+      };
+
+  }
+
+
+  $("chartMsg").textContent =
+    file.name;
+
+}
+
+
+/* =========================================================
+   ANALYZE CHART
+========================================================= */
+
+async function analyzeChart(
+  event
+) {
+
+  event.preventDefault();
+
+  if (
+    analysisSubmitting
+  ) {
+    return;
+  }
+
+  if (
+    !currentUser ||
+    !currentUser.approved
+  ) {
+
+    return;
+
+  }
+
+
+  const file =
+    selectedChartFile ||
+    $("chartFile")
+      ?.files?.[0];
+
+
+  if (!file) {
+
+    $("chartMsg").textContent =
+      currentLanguage() === "en"
+        ? "Please select a chart image first."
+        : currentLanguage() === "ar"
+          ? "يرجى اختيار صورة المخطط أولاً."
+          : "ابتدا تصویر نمودار را انتخاب کنید.";
+
+    return;
+
+  }
+
+
+  analysisSubmitting =
+    true;
+
+
+  const button =
+    $("analyzeBtn");
+
+  if (button) {
+    button.disabled =
+      true;
+  }
+
+
+  $("chartMsg").textContent =
+    currentLanguage() === "en"
+      ? "AI is analyzing your chart..."
+      : currentLanguage() === "ar"
+        ? "يقوم الذكاء الاصطناعي بتحليل المخطط..."
+        : "هوش مصنوعی در حال تحلیل نمودار شما است...";
+
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "chart",
+    file
+  );
+
+  formData.append(
+    "timeframe",
+    selectedTimeframe
+  );
+
+  formData.append(
+    "language",
+    currentLanguage()
+  );
+
+
+  try {
+
+    const data =
+      await api(
+        "/api/analyze-chart",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+
+    renderAnalysis(
+      data.analysis
+    );
+
+
+    $("chartMsg").textContent =
+      currentLanguage() === "en"
+        ? "Analysis completed."
+        : currentLanguage() === "ar"
+          ? "اكتمل التحليل."
+          : "تحلیل با موفقیت انجام شد.";
+
+
+    await loadHistory();
+
+
+  } catch (error) {
+
+    $("chartMsg").textContent =
+      error.message;
+
+  } finally {
+
+    analysisSubmitting =
+      false;
+
+    if (button) {
+      button.disabled =
+        false;
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   RENDER ANALYSIS
+========================================================= */
+
+function renderAnalysis(
+  result
+) {
+
+  const container =
+    $("analysisResult");
+
+  if (!container) {
+    return;
+  }
+
+
+  const direction =
+    textValue(
+      result?.direction,
+      "WAIT"
+    ).toUpperCase();
+
+
+  const directionCard =
+    $("directionCard");
+
+  if (directionCard) {
+
+    directionCard.classList.remove(
+      "buy",
+      "sell",
+      "wait"
+    );
+
 
     if (
-      Number.isNaN(
-        date.getTime()
+      direction === "BUY"
+    ) {
+
+      directionCard.classList.add(
+        "buy"
+      );
+
+    } else if (
+      direction === "SELL"
+    ) {
+
+      directionCard.classList.add(
+        "sell"
+      );
+
+    } else {
+
+      directionCard.classList.add(
+        "wait"
+      );
+
+    }
+
+  }
+
+
+  $("analysisDirection").textContent =
+    direction;
+
+
+  $("analysisSymbol").textContent =
+    textValue(
+      result?.symbol,
+      "XAUUSD"
+    );
+
+
+  $("analysisTimeframe").textContent =
+    timeframeLabel(
+      result?.timeframe ||
+      selectedTimeframe
+    );
+
+
+  $("analysisEntry").textContent =
+    textValue(
+      result?.entry,
+      "WAIT"
+    );
+
+
+  $("analysisSL").textContent =
+    textValue(
+      result?.sl,
+      "WAIT"
+    );
+
+
+  $("analysisTP1").textContent =
+    textValue(
+      result?.tp1,
+      "WAIT"
+    );
+
+
+  $("analysisTP2").textContent =
+    textValue(
+      result?.tp2,
+      "WAIT"
+    );
+
+
+  $("analysisTP3").textContent =
+    textValue(
+      result?.tp3,
+      "WAIT"
+    );
+
+
+  $("analysisTP4").textContent =
+    textValue(
+      result?.tp4,
+      "WAIT"
+    );
+
+
+  $("analysisTP5").textContent =
+    textValue(
+      result?.tp5,
+      "WAIT"
+    );
+
+
+  $("analysisConfidence").textContent =
+    textValue(
+      result?.confidence,
+      "Low"
+    );
+
+
+  $("analysisTextContent").textContent =
+    textValue(
+      result?.analysis,
+      ""
+    );
+
+
+  $("analysisWarning").textContent =
+    textValue(
+      result?.warning,
+      currentLanguage() === "en"
+        ? "Trading involves risk. Use proper risk management."
+        : currentLanguage() === "ar"
+          ? "التداول ينطوي على مخاطر. استخدم إدارة مناسبة للمخاطر."
+          : "معامله‌گری دارای ریسک است. مدیریت ریسک مناسب را رعایت کنید."
+    );
+
+
+  container.classList.remove(
+    "hidden"
+  );
+
+
+  container.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+
+}
+
+
+/* =========================================================
+   HISTORY
+========================================================= */
+
+async function loadHistory() {
+
+  if (
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+
+  try {
+
+    const data =
+      await api(
+        "/api/analyses"
+      );
+
+
+    const analyses =
+      Array.isArray(
+        data.analyses
       )
-    ) {
+        ? data.analyses
+        : [];
 
-      return String(value);
+
+    const container =
+      $("analysisHistory");
+
+    if (!container) {
+      return;
+    }
+
+
+    if (!analyses.length) {
+
+      container.innerHTML =
+        `<div class="empty">${
+          currentLanguage() === "en"
+            ? "No previous analyses yet."
+            : currentLanguage() === "ar"
+              ? "لا توجد تحليلات سابقة."
+              : "هنوز تحلیلی در تاریخچه وجود ندارد."
+        }</div>`;
+
+      return;
 
     }
 
-    return date.toLocaleString();
+
+    container.innerHTML =
+      analyses.map(
+        (item) => {
+
+          return `
+            <div class="historyItem">
+
+              <div class="historyTop">
+
+                <strong>
+                  ${escapeHtml(
+                    textValue(
+                      item.direction,
+                      "WAIT"
+                    )
+                  )}
+                </strong>
+
+                <small>
+                  ${escapeHtml(
+                    formatDate(
+                      item.created_at
+                    )
+                  )}
+                </small>
+
+              </div>
+
+              <div class="historyLevels">
+
+                <span>
+                  ${escapeHtml(
+                    item.symbol ||
+                    "XAUUSD"
+                  )}
+                </span>
+
+                <span>
+                  ${escapeHtml(
+                    timeframeLabel(
+                      item.timeframe
+                    )
+                  )}
+                </span>
+
+                <span>
+                  Entry:
+                  ${escapeHtml(
+                    textValue(
+                      item.entry,
+                      "WAIT"
+                    )
+                  )}
+                </span>
+
+                <span>
+                  SL:
+                  ${escapeHtml(
+                    textValue(
+                      item.sl,
+                      "WAIT"
+                    )
+                  )}
+                </span>
+
+              </div>
+
+              <p>
+                ${escapeHtml(
+                  textValue(
+                    item.analysis,
+                    ""
+                  )
+                )}
+              </p>
+
+            </div>
+          `;
+
+        }
+      ).join("");
+
+
+  } catch (error) {
+
+    console.error(
+      "HISTORY ERROR",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   SIGNALS
+========================================================= */
+
+async function loadSignals() {
+
+  if (
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+
+  try {
+
+    const data =
+      await api(
+        "/api/signals"
+      );
+
+
+    const signals =
+      Array.isArray(
+        data.signals
+      )
+        ? data.signals
+        : [];
+
+
+    const container =
+      $("signals");
+
+    if (!container) {
+      return;
+    }
+
+
+    if (!signals.length) {
+
+      container.innerHTML =
+        `<div class="empty">${
+          currentLanguage() === "en"
+            ? "No private signals yet."
+            : currentLanguage() === "ar"
+              ? "لا توجد إشارات خاصة حتى الآن."
+              : "هنوز سیگنال خصوصی منتشر نشده است."
+        }</div>`;
+
+      return;
+
+    }
+
+
+    container.innerHTML =
+      signals.map(
+        (signal) => {
+
+          return `
+            <div class="signal">
+
+              <div class="signalTitle">
+                ${escapeHtml(
+                  signal.title
+                )}
+              </div>
+
+              <small>
+                ${escapeHtml(
+                  formatDate(
+                    signal.created_at
+                  )
+                )}
+              </small>
+
+              <p>
+                ${escapeHtml(
+                  signal.body
+                ).replace(
+                  /\n/g,
+                  "<br>"
+                )}
+              </p>
+
+            </div>
+          `;
+
+        }
+      ).join("");
+
+
+  } catch (error) {
+
+    console.error(
+      "SIGNALS ERROR",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   SUPPORT
+========================================================= */
+
+async function sendSupport() {
+
+  if (
+    supportSubmitting
+  ) {
+    return;
+  }
+
+  if (
+    !currentUser ||
+    !currentUser.approved
+  ) {
+    return;
+  }
+
+
+  const textarea =
+    $("supportText");
+
+  const message =
+    textarea
+      ?.value
+      .trim();
+
+
+  if (!message) {
+
+    $("supportMsg").textContent =
+      currentLanguage() === "en"
+        ? "Please write a message."
+        : currentLanguage() === "ar"
+          ? "يرجى كتابة رسالة."
+          : "لطفاً پیام خود را بنویسید.";
+
+    return;
 
   }
 
 
-  /* =========================================================
-     STATUS CLASS
-  ========================================================= */
+  supportSubmitting =
+    true;
 
-  function statusClass(status) {
+
+  const button =
+    $("supportBtn");
+
+  if (button) {
+    button.disabled =
+      true;
+  }
+
+
+  try {
+
+    const data =
+      await api(
+        "/api/support",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              message
+            })
+        }
+      );
+
+
+    if (textarea) {
+      textarea.value =
+        "";
+    }
+
+
+    $("supportMsg").textContent =
+      data.message ||
+      (
+        currentLanguage() === "en"
+          ? "Your message has been sent."
+          : currentLanguage() === "ar"
+            ? "تم إرسال رسالتك."
+            : "پیام شما ارسال شد."
+      );
+
+
+  } catch (error) {
+
+    $("supportMsg").textContent =
+      error.message;
+
+  } finally {
+
+    supportSubmitting =
+      false;
+
+    if (button) {
+      button.disabled =
+        false;
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   RESTORE SESSION
+========================================================= */
+
+async function restoreSession() {
+
+  try {
+
+    const data =
+      await api(
+        "/api/me"
+      );
+
 
     if (
-      status === "approved"
+      data.loggedIn &&
+      data.user
     ) {
 
-      return "status-approved";
+      currentUser =
+        data.user;
+
+      await showDashboard();
+
+      await refreshAccess();
+
+      return;
 
     }
 
-    if (
-      status === "rejected"
-    ) {
 
-      return "status-rejected";
+    currentUser =
+      null;
 
+    const dashboard =
+      $("dashboard");
+
+    const auth =
+      $("auth");
+
+    if (dashboard) {
+      dashboard.classList.add(
+        "hidden"
+      );
     }
 
-    return "status-pending";
+    if (auth) {
+      auth.classList.remove(
+        "hidden"
+      );
+    }
+
+
+  } catch (error) {
+
+    console.error(
+      "SESSION ERROR",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   EVENTS
+========================================================= */
+
+function bindEvents() {
+
+  const language =
+    $("lang");
+
+  if (language) {
+
+    language.addEventListener(
+      "change",
+      () => {
+
+        setLanguage(
+          language.value
+        );
+
+      }
+    );
 
   }
 
 
-  /* =========================================================
-     LOAD ADMIN DATA
-  ========================================================= */
+  document
+    .querySelectorAll(
+      ".tab[data-tab]"
+    )
+    .forEach(
+      (button) => {
 
-  async function load() {
+        button.addEventListener(
+          "click",
+          () => {
 
-    try {
+            showAuthTab(
+              button.dataset.tab
+            );
 
-      const data =
-        await api(
-          "/api/admin/data"
+          }
         );
 
-
-      $("#login")
-        .classList
-        .add("hidden");
-
-      $("#admin")
-        .classList
-        .remove("hidden");
-
-
-      const users =
-        Array.isArray(
-          data.users
-        )
-          ? data.users
-          : [];
-
-
-      const payments =
-        Array.isArray(
-          data.payments
-        )
-          ? data.payments
-          : [];
-
-
-      const signals =
-        Array.isArray(
-          data.signals
-        )
-          ? data.signals
-          : [];
-
-
-      /* =====================================================
-         STATISTICS
-      ===================================================== */
-
-      $("#totalUsers")
-        .textContent =
-          users.length;
-
-
-      $("#pendingPayments")
-        .textContent =
-          payments.filter(
-            p =>
-              p.status ===
-              "pending"
-          ).length;
-
-
-      $("#approvedUsers")
-        .textContent =
-          users.filter(
-            u =>
-              Boolean(
-                u.approved
-              )
-          ).length;
-
-
-      /* =====================================================
-         PAYMENTS
-      ===================================================== */
-
-      if (!payments.length) {
-
-        $("#payments")
-          .innerHTML =
-          `<div class="empty">
-            No payment requests yet.
-          </div>`;
-
-      } else {
-
-        $("#payments")
-          .innerHTML =
-          payments.map(
-            payment => {
-
-              const isPending =
-                payment.status ===
-                "pending";
-
-
-              return `
-                <div class="card">
-
-                  <strong>
-                    ${esc(
-                      payment.name ||
-                      "Unknown User"
-                    )}
-                  </strong>
-
-                  <small>
-                    ${esc(
-                      payment.email ||
-                      "-"
-                    )}
-                  </small>
-
-                  <p>
-
-                    <strong>
-                      Method:
-                    </strong>
-
-                    ${esc(
-                      payment.method
-                    )}
-
-                    <br>
-
-                    <strong>
-                      Amount:
-                    </strong>
-
-                    ${esc(
-                      payment.amount
-                    )}
-
-                    <br>
-
-                    <strong>
-                      Reference:
-                    </strong>
-
-                    ${esc(
-                      payment.reference
-                    )}
-
-                    <br>
-
-                    <strong>
-                      Status:
-                    </strong>
-
-                    <span
-                      class="${statusClass(
-                        payment.status
-                      )}"
-                    >
-                      ${esc(
-                        payment.status
-                      )}
-                    </span>
-
-                    <br>
-
-                    <strong>
-                      Submitted:
-                    </strong>
-
-                    ${esc(
-                      formatDate(
-                        payment.created_at
-                      )
-                    )}
-
-                  </p>
-
-                  <a
-                    class="receipt"
-                    href="/api/admin/payment/${encodeURIComponent(
-                      payment.id
-                    )}/receipt"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Open Payment Receipt
-                  </a>
-
-                  ${
-                    isPending
-                      ? `
-                        <div class="actions">
-
-                          <button
-                            onclick="approvePayment(${Number(
-                              payment.id
-                            )})"
-                          >
-                            Approve Payment
-                          </button>
-
-                          <button
-                            class="ghost"
-                            onclick="rejectPayment(${Number(
-                              payment.id
-                            )})"
-                          >
-                            Reject
-                          </button>
-
-                        </div>
-                      `
-                      : ""
-                  }
-
-                </div>
-              `;
-
-            }
-          ).join("");
-
       }
+    );
 
 
-      /* =====================================================
-         USERS
-      ===================================================== */
+  const loginForm =
+    $("loginForm");
 
-      if (!users.length) {
+  if (loginForm) {
 
-        $("#users")
-          .innerHTML =
-          `<div class="empty">
-            No registered users yet.
-          </div>`;
-
-      } else {
-
-        $("#users")
-          .innerHTML =
-          users.map(
-            user => {
-
-              return `
-                <div class="card">
-
-                  <strong>
-                    ${esc(
-                      user.name
-                    )}
-                  </strong>
-
-                  <small>
-                    ${esc(
-                      user.email
-                    )}
-                  </small>
-
-                  <p>
-
-                    <strong>
-                      Access:
-                    </strong>
-
-                    <span
-                      class="${
-                        user.approved
-                          ? "status-approved"
-                          : "status-pending"
-                      }"
-                    >
-                      ${
-                        user.approved
-                          ? "Approved"
-                          : "Waiting for payment approval"
-                      }
-                    </span>
-
-                    <br>
-
-                    <strong>
-                      Registered:
-                    </strong>
-
-                    ${esc(
-                      formatDate(
-                        user.created_at
-                      )
-                    )}
-
-                  </p>
-
-                </div>
-              `;
-
-            }
-          ).join("");
-
-      }
-
-
-      /* =====================================================
-         SIGNALS
-      ===================================================== */
-
-      if (!signals.length) {
-
-        $("#signals")
-          .innerHTML =
-          `<div class="empty">
-            No published signals yet.
-          </div>`;
-
-      } else {
-
-        $("#signals")
-          .innerHTML =
-          signals.map(
-            signal => {
-
-              return `
-                <div class="card">
-
-                  <strong>
-                    ${esc(
-                      signal.title
-                    )}
-                  </strong>
-
-                  <small>
-                    ${esc(
-                      formatDate(
-                        signal.created_at
-                      )
-                    )}
-                  </small>
-
-                  <p>
-                    ${esc(
-                      signal.body
-                    ).replace(
-                      /\n/g,
-                      "<br>"
-                    )}
-                  </p>
-
-                  <button
-                    class="ghost"
-                    onclick="deleteSignal(${Number(
-                      signal.id
-                    )})"
-                  >
-                    Delete Signal
-                  </button>
-
-                </div>
-              `;
-
-            }
-          ).join("");
-
-      }
-
-
-    } catch (error) {
-
-      $("#login")
-        .classList
-        .remove("hidden");
-
-      $("#admin")
-        .classList
-        .add("hidden");
-
-    }
+    loginForm.addEventListener(
+      "submit",
+      login
+    );
 
   }
 
 
-  /* =========================================================
-     APPROVE PAYMENT
-  ========================================================= */
+  const registerForm =
+    $("registerForm");
 
-  window.approvePayment =
-    async function (id) {
+  if (registerForm) {
 
-      if (
-        !confirm(
-          "Have you checked the payment receipt and confirmed the payment?"
-        )
-      ) {
+    registerForm.addEventListener(
+      "submit",
+      register
+    );
 
-        return;
-
-      }
-
-      try {
-
-        await api(
-          `/api/admin/payment/${encodeURIComponent(
-            id
-          )}/approve`,
-          {
-            method: "POST"
-          }
-        );
-
-        await load();
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-
-      }
-
-    };
+  }
 
 
-  /* =========================================================
-     REJECT PAYMENT
-  ========================================================= */
+  const logoutButton =
+    $("logout");
 
-  window.rejectPayment =
-    async function (id) {
+  if (logoutButton) {
 
-      if (
-        !confirm(
-          "Reject this payment request?"
-        )
-      ) {
-
-        return;
-
-      }
-
-      try {
-
-        await api(
-          `/api/admin/payment/${encodeURIComponent(
-            id
-          )}/reject`,
-          {
-            method: "POST"
-          }
-        );
-
-        await load();
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-
-      }
-
-    };
-
-
-  /* =========================================================
-     DELETE SIGNAL
-  ========================================================= */
-
-  window.deleteSignal =
-    async function (id) {
-
-      if (
-        !confirm(
-          "Delete this signal?"
-        )
-      ) {
-
-        return;
-
-      }
-
-      try {
-
-        await api(
-          `/api/admin/signals/${encodeURIComponent(
-            id
-          )}`,
-          {
-            method: "DELETE"
-          }
-        );
-
-        await load();
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-
-      }
-
-    };
-
-
-  /* =========================================================
-     ADMIN LOGIN
-  ========================================================= */
-
-  $("#al")
-    .addEventListener(
+    logoutButton.addEventListener(
       "click",
-      async function () {
+      logout
+    );
 
-        const password =
-          $("#ap").value;
-
-        $("#am")
-          .textContent = "";
+  }
 
 
-        if (!password) {
+  document
+    .querySelectorAll(
+      ".pay[data-method]"
+    )
+    .forEach(
+      (button) => {
 
-          $("#am")
-            .textContent =
-            "Please enter the admin password.";
+        button.addEventListener(
+          "click",
+          () => {
 
-          return;
+            selectPaymentMethod(
+              button.dataset.method
+            );
 
-        }
-
-
-        try {
-
-          await api(
-            "/api/admin/login",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json"
-              },
-
-              body:
-                JSON.stringify({
-                  password
-                })
-            }
-          );
-
-
-          $("#ap")
-            .value = "";
-
-          await load();
-
-
-        } catch (error) {
-
-          $("#am")
-            .textContent =
-            error.message;
-
-        }
+          }
+        );
 
       }
     );
 
 
-  /* =========================================================
-     ENTER KEY LOGIN
-  ========================================================= */
+  document
+    .querySelectorAll(
+      ".timeframeOption"
+    )
+    .forEach(
+      (button) => {
 
-  $("#ap")
-    .addEventListener(
-      "keydown",
-      function (event) {
+        button.addEventListener(
+          "click",
+          () => {
+
+            selectTimeframe(
+              button.dataset.timeframe
+            );
+
+          }
+        );
+
+      }
+    );
+
+
+  const paymentForm =
+    $("paymentForm");
+
+  if (paymentForm) {
+
+    paymentForm.addEventListener(
+      "submit",
+      submitPayment
+    );
+
+  }
+
+
+  const receipt =
+    $("receipt");
+
+  if (receipt) {
+
+    receipt.addEventListener(
+      "change",
+      () => {
+
+        const file =
+          receipt.files?.[0];
 
         if (
-          event.key ===
-          "Enter"
+          file &&
+          file.size >
+            5 * 1024 * 1024
         ) {
 
-          $("#al")
-            .click();
+          $("payMsg").textContent =
+            currentLanguage() === "en"
+              ? "Receipt is too large. Maximum size is 5 MB."
+              : currentLanguage() === "ar"
+                ? "الإيصال كبير جداً. الحد الأقصى 5 ميجابايت."
+                : "رسید بسیار بزرگ است. حداکثر حجم ۵ مگابایت است.";
+
+          receipt.value =
+            "";
 
         }
 
       }
     );
 
+  }
 
-  /* =========================================================
-     LOGOUT
-  ========================================================= */
 
-  $("#logout")
-    .addEventListener(
+  const chartFile =
+    $("chartFile");
+
+  if (chartFile) {
+
+    chartFile.addEventListener(
+      "change",
+      handleChartFile
+    );
+
+  }
+
+
+  const chartForm =
+    $("chartForm");
+
+  if (chartForm) {
+
+    chartForm.addEventListener(
+      "submit",
+      analyzeChart
+    );
+
+  }
+
+
+  const supportButton =
+    $("supportBtn");
+
+  if (supportButton) {
+
+    supportButton.addEventListener(
       "click",
-      async function () {
-
-        try {
-
-          await api(
-            "/api/logout",
-            {
-              method: "POST"
-            }
-          );
-
-        } catch (_) {}
-
-        location.reload();
-
-      }
+      sendSupport
     );
 
+  }
 
-  /* =========================================================
-     PUBLISH SIGNAL
-  ========================================================= */
-
-  $("#publish")
-    .addEventListener(
-      "click",
-      async function () {
-
-        const title =
-          $("#st")
-            .value
-            .trim();
-
-        const body =
-          $("#sb")
-            .value
-            .trim();
+}
 
 
-        $("#pm")
-          .textContent = "";
+/* =========================================================
+   INITIALIZE
+========================================================= */
 
+document.addEventListener(
+  "DOMContentLoaded",
+  async () => {
 
-        if (
-          !title ||
-          !body
-        ) {
-
-          $("#pm")
-            .textContent =
-            "Title and signal body are required.";
-
-          return;
-
-        }
-
-
-        const button =
-          $("#publish");
-
-        button.disabled =
-          true;
-
-
-        try {
-
-          await api(
-            "/api/admin/signals",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json"
-              },
-
-              body:
-                JSON.stringify({
-                  title,
-                  body
-                })
-            }
-          );
-
-
-          $("#st")
-            .value = "";
-
-          $("#sb")
-            .value = "";
-
-          $("#pm")
-            .textContent =
-            "Signal published successfully.";
-
-          await load();
-
-
-        } catch (error) {
-
-          $("#pm")
-            .textContent =
-            error.message;
-
-        } finally {
-
-          button.disabled =
-            false;
-
-        }
-
-      }
+    setLanguage(
+      getLanguage()
     );
 
+    showAuthTab(
+      "login"
+    );
 
-  /* =========================================================
-     START
-  ========================================================= */
+    selectPaymentMethod(
+      "hesabpay"
+    );
 
-  load();
+    selectTimeframe(
+      "1m"
+    );
 
-</script>
+    bindEvents();
 
-</body>
-</html>
+    await restoreSession();
+
+  }
+);
