@@ -1,23 +1,34 @@
 <!doctype html>
 <html lang="en">
+
 <head>
+
   <meta charset="utf-8">
+
   <meta
     name="viewport"
     content="width=device-width,initial-scale=1"
   >
 
-  <title>GoldAI — XAUUSD AI Analyzer</title>
+  <title>
+    GoldAI — XAUUSD AI Analyzer
+  </title>
 
   <meta
     name="description"
     content="GoldAI XAUUSD AI chart analysis and member access platform."
   >
 
-  <link rel="stylesheet" href="styles.css">
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  >
+
 </head>
 
+
 <body>
+
 
 <header class="topbar">
 
@@ -26,9 +37,19 @@
   </div>
 
   <select id="lang">
-    <option value="en">English</option>
-    <option value="fa">فارسی</option>
-    <option value="ar">العربية</option>
+
+    <option value="en">
+      English
+    </option>
+
+    <option value="fa">
+      فارسی
+    </option>
+
+    <option value="ar">
+      العربية
+    </option>
+
   </select>
 
 </header>
@@ -36,9 +57,13 @@
 
 <main>
 
+
   <!-- HERO -->
 
-  <section id="hero" class="hero">
+  <section
+    id="hero"
+    class="hero"
+  >
 
     <div class="pill">
       XAUUSD • AI CHART ANALYZER
@@ -52,22 +77,48 @@
       Upload your XAUUSD chart and let GoldAI analyze the visible market structure.
     </p>
 
+
     <div class="grid">
 
-      <div class="card">
-        <b>240 AFN</b>
-        <small>HesabPay activation</small>
-      </div>
 
       <div class="card">
-        <b>4 USD / USDT</b>
-        <small>Binance Pay activation</small>
+
+        <b>
+          240 AFN
+        </b>
+
+        <small>
+          HesabPay activation
+        </small>
+
       </div>
 
+
       <div class="card">
-        <b>AI Vision</b>
-        <small>Chart image analysis</small>
+
+        <b>
+          4 USD / USDT
+        </b>
+
+        <small>
+          Binance Pay activation
+        </small>
+
       </div>
+
+
+      <div class="card">
+
+        <b>
+          AI Vision
+        </b>
+
+        <small>
+          Chart image analysis
+        </small>
+
+      </div>
+
 
     </div>
 
@@ -76,28 +127,37 @@
 
   <!-- AUTH -->
 
-  <section id="auth" class="panel">
+  <section
+    id="auth"
+    class="panel"
+  >
 
     <div class="tabs">
+
 
       <button
         class="tab active"
         data-tab="login"
+        type="button"
       >
         Login
       </button>
 
+
       <button
         class="tab"
         data-tab="register"
+        type="button"
       >
         Create account
       </button>
+
 
     </div>
 
 
     <form id="loginForm">
+
 
       <input
         id="loginEmail"
@@ -106,6 +166,7 @@
         required
       >
 
+
       <input
         id="loginPass"
         type="password"
@@ -113,9 +174,11 @@
         required
       >
 
+
       <button type="submit">
         Login
       </button>
+
 
     </form>
 
@@ -125,11 +188,13 @@
       class="hidden"
     >
 
+
       <input
         id="regName"
         placeholder="Full name"
         required
       >
+
 
       <input
         id="regEmail"
@@ -137,6 +202,7 @@
         placeholder="Email"
         required
       >
+
 
       <input
         id="regPass"
@@ -146,9 +212,11 @@
         required
       >
 
+
       <button type="submit">
         Create account
       </button>
+
 
     </form>
 
@@ -157,6 +225,7 @@
       id="authMsg"
       class="msg"
     ></p>
+
 
   </section>
 
@@ -175,6 +244,7 @@
 
       <div class="row">
 
+
         <div>
 
           <div class="miniLabel">
@@ -187,16 +257,21 @@
 
         </div>
 
+
         <button
           id="logout"
           class="ghost"
+          type="button"
         >
           Logout
         </button>
 
+
       </div>
 
+
       <p id="status"></p>
+
 
     </div>
 
@@ -208,7 +283,9 @@
       class="panel"
     >
 
+
       <div class="sectionTitle">
+
 
         <div>
 
@@ -222,7 +299,9 @@
 
         </div>
 
+
       </div>
+
 
       <p>
         Pay once, then upload your payment receipt.
@@ -231,11 +310,16 @@
       </p>
 
 
-      <div class="payGrid">
+      <div
+        class="payGrid"
+        id="paymentMethods"
+      >
+
 
         <button
           class="pay active"
           data-method="hesabpay"
+          type="button"
         >
 
           <b>
@@ -252,6 +336,7 @@
         <button
           class="pay"
           data-method="binance"
+          type="button"
         >
 
           <b>
@@ -264,6 +349,7 @@
 
         </button>
 
+
       </div>
 
 
@@ -275,11 +361,13 @@
 
       <form id="paymentForm">
 
+
         <input
           id="reference"
           placeholder="Transaction ID / reference"
           required
         >
+
 
         <input
           id="receipt"
@@ -288,9 +376,11 @@
           required
         >
 
+
         <button type="submit">
           Submit receipt for review
         </button>
+
 
       </form>
 
@@ -299,6 +389,7 @@
         id="payMsg"
         class="msg"
       ></p>
+
 
     </div>
 
@@ -310,7 +401,9 @@
       class="panel hidden"
     >
 
+
       <div class="sectionTitle">
+
 
         <div>
 
@@ -324,21 +417,107 @@
 
         </div>
 
+
         <div class="aiBadge">
           AI
         </div>
+
 
       </div>
 
 
       <p class="muted">
-        Upload a clear screenshot of your XAUUSD chart.
-        GoldAI will analyze the visible technical structure
-        and return BUY, SELL or WAIT.
+        First select the timeframe of your chart.
+        Then upload a clear XAUUSD screenshot from the same timeframe.
+        GoldAI will analyze the selected timeframe.
       </p>
 
 
+      <!-- TIMEFRAME -->
+
+      <div class="timeframeSelector">
+
+
+        <div class="miniLabel">
+          ANALYSIS TIMEFRAME
+        </div>
+
+
+        <p class="muted">
+          Select the timeframe first:
+        </p>
+
+
+        <div
+          class="payGrid"
+          id="timeframeOptions"
+        >
+
+
+          <button
+            type="button"
+            class="pay timeframeOption active"
+            data-timeframe="1m"
+          >
+
+            <b>
+              1 Minute
+            </b>
+
+            <small>
+              1m
+            </small>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="pay timeframeOption"
+            data-timeframe="5m"
+          >
+
+            <b>
+              5 Minutes
+            </b>
+
+            <small>
+              5m
+            </small>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="pay timeframeOption"
+            data-timeframe="15m"
+          >
+
+            <b>
+              15 Minutes
+            </b>
+
+            <small>
+              15m
+            </small>
+
+          </button>
+
+
+        </div>
+
+
+        <p id="selectedTimeframeText">
+          Selected timeframe: 1 Minute
+        </p>
+
+
+      </div>
+
+
       <form id="chartForm">
+
 
         <label
           for="chartFile"
@@ -349,13 +528,16 @@
             ↑
           </div>
 
+
           <strong>
             Choose XAUUSD chart
           </strong>
 
+
           <span>
             PNG, JPG, WEBP or GIF • Max 5 MB
           </span>
+
 
         </label>
 
@@ -389,6 +571,7 @@
           Analyze Chart with AI
         </button>
 
+
       </form>
 
 
@@ -404,6 +587,7 @@
         id="analysisResult"
         class="hidden"
       >
+
 
         <div
           id="directionCard"
@@ -423,75 +607,136 @@
 
         <div class="analysisGrid">
 
+
           <div class="analysisBox">
-            <small>Symbol</small>
+
+            <small>
+              Symbol
+            </small>
+
             <b id="analysisSymbol">
               XAUUSD
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>Timeframe</small>
+
+            <small>
+              Timeframe
+            </small>
+
             <b id="analysisTimeframe">
-              Unknown
+              1m
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>Entry</small>
+
+            <small>
+              Entry
+            </small>
+
             <b id="analysisEntry">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>Stop Loss</small>
+
+            <small>
+              Stop Loss
+            </small>
+
             <b id="analysisSL">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>TP1</small>
+
+            <small>
+              TP1
+            </small>
+
             <b id="analysisTP1">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>TP2</small>
+
+            <small>
+              TP2
+            </small>
+
             <b id="analysisTP2">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>TP3</small>
+
+            <small>
+              TP3
+            </small>
+
             <b id="analysisTP3">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>TP4</small>
+
+            <small>
+              TP4
+            </small>
+
             <b id="analysisTP4">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>TP5</small>
+
+            <small>
+              TP5
+            </small>
+
             <b id="analysisTP5">
               WAIT
             </b>
+
           </div>
 
+
           <div class="analysisBox">
-            <small>Confidence</small>
+
+            <small>
+              Confidence
+            </small>
+
             <b id="analysisConfidence">
               Low
             </b>
+
           </div>
+
 
         </div>
 
@@ -502,8 +747,7 @@
             Technical Analysis
           </h3>
 
-          <p id="analysisTextContent">
-          </p>
+          <p id="analysisTextContent"></p>
 
         </div>
 
@@ -514,12 +758,13 @@
             Risk Warning
           </strong>
 
-          <p id="analysisWarning">
-          </p>
+          <p id="analysisWarning"></p>
 
         </div>
 
+
       </div>
+
 
     </div>
 
@@ -531,7 +776,9 @@
       class="panel hidden"
     >
 
+
       <div class="sectionTitle">
+
 
         <div>
 
@@ -545,10 +792,12 @@
 
         </div>
 
+
       </div>
 
-      <div id="analysisHistory">
-      </div>
+
+      <div id="analysisHistory"></div>
+
 
     </div>
 
@@ -560,7 +809,9 @@
       class="panel hidden"
     >
 
+
       <div class="sectionTitle">
+
 
         <div>
 
@@ -574,10 +825,12 @@
 
         </div>
 
+
       </div>
 
-      <div id="signals">
-      </div>
+
+      <div id="signals"></div>
+
 
     </div>
 
@@ -586,32 +839,42 @@
 
     <div class="panel">
 
+
       <div class="miniLabel">
         SUPPORT
       </div>
 
+
       <h2>
         Website Support
       </h2>
+
 
       <textarea
         id="supportText"
         placeholder="Write your message..."
       ></textarea>
 
-      <button id="supportBtn">
+
+      <button
+        id="supportBtn"
+        type="button"
+      >
         Send support message
       </button>
+
 
       <p
         id="supportMsg"
         class="msg"
       ></p>
 
+
     </div>
 
 
   </section>
+
 
 </main>
 
@@ -632,4 +895,5 @@
 <script src="app.js"></script>
 
 </body>
+
 </html>
