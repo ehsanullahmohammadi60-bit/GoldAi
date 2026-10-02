@@ -539,20 +539,42 @@ async function requireApprovedUser(
 
   try {
 
-    await requireUser(
-      req,
-      res,
-      () => {}
-    );
+    const session =
+      getSession(req);
 
     if (
-      res.headersSent
+      !session ||
+      session.role !==
+        "user"
     ) {
-      return;
+
+      return res.status(401).json({
+        error:
+          "Not authenticated."
+      });
     }
 
+    const rows =
+      await sql`
+        SELECT *
+        FROM users
+        WHERE id =
+          ${session.userId}
+        LIMIT 1
+      `;
+
+    if (!rows.length) {
+
+      return res.status(401).json({
+        error:
+          "User not found."
+      });
+    }
+
+    req.user =
+      rows[0];
+
     if (
-      !req.user ||
       !req.user.approved
     ) {
 
@@ -1200,17 +1222,16 @@ async function handlePayment(
       });
     }
 
+    /*
+      مقدار واقعی پرداخت توسط Backend تعیین می‌شود.
+      مقدار Frontend قابل اعتماد نیست.
+    */
+
     const expectedAmount =
       cleanMethod ===
         "binance"
         ? "4"
         : "240";
-
-    /*
-      مقدار پرداخت از سمت Frontend
-      قابل اعتماد نیست.
-      Backend مقدار صحیح روش را ثبت می‌کند.
-    */
 
     const receiptData =
       req.file.buffer.toString(
@@ -2479,11 +2500,43 @@ app.get(
         `;
 
 
+      /*
+        پیام‌های Support برای Admin.
+        این قسمت قبلاً از پاسخ Admin API حذف شده بود
+        و باعث می‌شد بخش Support در پنل Admin خالی بماند.
+      */
+
+      const support =
+        await sql`
+          SELECT
+            s.id,
+            s.user_id,
+            s.message,
+            s.created_at,
+            u.name,
+            u.email
+          FROM support s
+          LEFT JOIN users u
+            ON u.id =
+              s.user_id
+          ORDER BY
+            s.created_at DESC
+          LIMIT 200
+        `;
+
+
+      res.setHeader(
+        "Cache-Control",
+        "no-store"
+      );
+
+
       return res.json({
         ok: true,
         users,
         payments,
-        signals
+        signals,
+        support
       });
 
 
