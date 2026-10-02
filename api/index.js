@@ -8,26 +8,68 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
-const DATABASE_URL = process.env.DATABASE_URL;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || "goldai-change-this-secret";
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD || "change-admin-password";
-const AI_MODEL =
-  process.env.OPENAI_MODEL || "gpt-6-luna";
+/*
+========================================================
+ENVIRONMENT
+========================================================
+Neon/Vercel integrations may expose the connection string
+under different variable names. We support the common ones.
+*/
 
-const sql = DATABASE_URL ? neon(DATABASE_URL) : null;
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.NEON_DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.POSTGRES_PRISMA_URL ||
+  "";
+
+const OPENAI_API_KEY =
+  process.env.OPENAI_API_KEY || "";
+
+const SESSION_SECRET =
+  process.env.SESSION_SECRET ||
+  "goldai-change-this-secret";
+
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD ||
+  "change-admin-password";
+
+const AI_MODEL =
+  process.env.OPENAI_MODEL ||
+  "gpt-6-luna";
+
+const sql = DATABASE_URL
+  ? neon(DATABASE_URL)
+  : null;
 
 let dbReadyPromise = null;
 
+/*
+========================================================
+DATABASE INITIALIZATION
+========================================================
+*/
+
 async function ensureDatabase() {
   if (!sql) {
-    throw new Error("DATABASE_URL is not configured.");
+    throw new Error(
+      "No database connection string was found. Expected DATABASE_URL, NEON_DATABASE_URL, POSTGRES_URL, POSTGRES_URL_NON_POOLING, or POSTGRES_PRISMA_URL."
+    );
   }
 
   if (!dbReadyPromise) {
     dbReadyPromise = (async () => {
+      /*
+      First verify that Neon itself is reachable.
+      */
+      await sql`
+        SELECT 1 AS ok
+      `;
+
+      /*
+      USERS
+      */
       await sql`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -41,6 +83,9 @@ async function ensureDatabase() {
         )
       `;
 
+      /*
+      PAYMENTS
+      */
       await sql`
         CREATE TABLE IF NOT EXISTS payments (
           id SERIAL PRIMARY KEY,
@@ -56,6 +101,9 @@ async function ensureDatabase() {
         )
       `;
 
+      /*
+      SIGNALS
+      */
       await sql`
         CREATE TABLE IF NOT EXISTS signals (
           id SERIAL PRIMARY KEY,
@@ -65,6 +113,9 @@ async function ensureDatabase() {
         )
       `;
 
+      /*
+      SUPPORT
+      */
       await sql`
         CREATE TABLE IF NOT EXISTS support (
           id SERIAL PRIMARY KEY,
@@ -74,6 +125,9 @@ async function ensureDatabase() {
         )
       `;
 
+      /*
+      ANALYSES
+      */
       await sql`
         CREATE TABLE IF NOT EXISTS analyses (
           id SERIAL PRIMARY KEY,
@@ -96,14 +150,17 @@ async function ensureDatabase() {
       `;
 
       /*
-        IMPORTANT MIGRATION
+      ====================================================
+      ANALYSES ID MIGRATION
+      ====================================================
 
-        Some older Neon databases may already have an analyses
-        table where id is NOT NULL but does not have an automatic
-        sequence/default.
+      Older database versions may have:
+        id NOT NULL
 
-        This fixes that problem automatically without deleting
-        existing analysis records.
+      but no automatic sequence/default.
+
+      This repairs that situation without deleting
+      existing records.
       */
 
       const idInfo = await sql`
@@ -117,60 +174,338 @@ async function ensureDatabase() {
         LIMIT 1
       `;
 
-      if (
-        idInfo.length &&
-        !idInfo[0].column_default &&
-        idInfo[0].is_identity !== "YES"
-      ) {
-        await sql`
-          CREATE SEQUENCE IF NOT EXISTS analyses_id_seq
-        `;
+      if (idInfo.length) {
+        const currentDefault =
+          idInfo[0].column_default;
 
-        await sql`
-          SELECT setval(
-            'analyses_id_seq',
-            GREATEST(
-              COALESCE(
-                (SELECT MAX(id) FROM analyses),
-                0
-              ) + 1,
-              1
-            ),
-            false
-          )
-        `;
+        const isIdentity =
+          idInfo[0].is_identity === "YES";
 
-        await sql`
-          ALTER TABLE analyses
-          ALTER COLUMN id
-          SET DEFAULT nextval('analyses_id_seq')
-        `;
+        if (
+          !currentDefault &&
+          !isIdentity
+        ) {
+          await sql`
+            CREATE SEQUENCE IF NOT EXISTS analyses_id_seq
+          `;
+
+          const maxRows = await sql`
+            SELECT COALESCE(MAX(id), 0) AS max_id
+            FROM analyses
+          `;
+
+          const maxId =
+            Number(maxRows[0]?.max_id || 0);
+
+          const nextId =
+            Math.max(maxId + 1, 1);
+
+          await sql`
+            SELECT setval(
+              'analyses_id_seq',
+              ${nextId},
+              false
+            )
+          `;
+
+          await sql`
+            ALTER TABLE analyses
+            ALTER COLUMN id
+            SET DEFAULT nextval('analyses_id_seq')
+          `;
+        }
       }
-    })();
+
+      /*
+      ====================================================
+      OTHER LEGACY TABLE ID REPAIRS
+      ====================================================
+      */
+
+      await repairSerialId("users");
+      await repairSerialId("payments");
+      await repairSerialId("signals");
+      await repairSerialId("support");
+      await repairSerialId("analyses");
+    })().catch((error) => {
+      /*
+      Do not permanently cache a rejected promise.
+      If Neon has a temporary problem, the next request
+      gets another chance to connect.
+      */
+      dbReadyPromise = null;
+      throw error;
+    });
   }
 
   return dbReadyPromise;
 }
 
+/*
+========================================================
+SERIAL ID REPAIR
+========================================================
+*/
+
+async function repairSerialId(tableName) {
+  const allowedTables = [
+    "users",
+    "payments",
+    "signals",
+    "support",
+    "analyses"
+  ];
+
+  if (!allowedTables.includes(tableName)) {
+    return;
+  }
+
+  try {
+    const info = await sql`
+      SELECT
+        column_default,
+        is_identity
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = ${tableName}
+        AND column_name = 'id'
+      LIMIT 1
+    `;
+
+    if (!info.length) {
+      return;
+    }
+
+    const hasDefault =
+      Boolean(info[0].column_default);
+
+    const isIdentity =
+      info[0].is_identity === "YES";
+
+    if (
+      hasDefault ||
+      isIdentity
+    ) {
+      return;
+    }
+
+    const sequenceName =
+      `${tableName}_id_seq`;
+
+    await sql.unsafe(
+      `CREATE SEQUENCE IF NOT EXISTS "${sequenceName}"`
+    );
+
+    const maxRows = await sql.unsafe(
+      `SELECT COALESCE(MAX(id), 0) AS max_id FROM "${tableName}"`
+    );
+
+    const maxId =
+      Number(maxRows[0]?.max_id || 0);
+
+    const nextId =
+      Math.max(maxId + 1, 1);
+
+    await sql.unsafe(
+      `SELECT setval('${sequenceName}', ${nextId}, false)`
+    );
+
+    await sql.unsafe(
+      `ALTER TABLE "${tableName}" ALTER COLUMN id SET DEFAULT nextval('${sequenceName}')`
+    );
+  } catch (error) {
+    /*
+    analyses has already been explicitly repaired above.
+    If another legacy table cannot be repaired, do not
+    hide the original database connection problem.
+    */
+    console.error(
+      `SERIAL ID REPAIR ERROR (${tableName}):`,
+      error
+    );
+  }
+}
+
+/*
+========================================================
+HEALTH CHECK
+========================================================
+*/
+
+app.get(
+  "/",
+  (req, res) => {
+    res.json({
+      ok: true,
+      service: "GoldAI API",
+      status: "online"
+    });
+  }
+);
+
+app.get(
+  "/api",
+  async (req, res) => {
+    if (!sql) {
+      return res.status(500).json({
+        ok: false,
+        service: "GoldAI API",
+        status: "online",
+        database: "missing",
+        ai: OPENAI_API_KEY
+          ? "configured"
+          : "missing",
+        error:
+          "No database connection string is available."
+      });
+    }
+
+    try {
+      await sql`
+        SELECT 1 AS ok
+      `;
+
+      return res.json({
+        ok: true,
+        service: "GoldAI API",
+        status: "online",
+        database: "connected",
+        ai: OPENAI_API_KEY
+          ? "configured"
+          : "missing"
+      });
+    } catch (error) {
+      console.error(
+        "API DATABASE HEALTH ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        service: "GoldAI API",
+        status: "online",
+        database: "error",
+        ai: OPENAI_API_KEY
+          ? "configured"
+          : "missing",
+        error:
+          error?.message ||
+          "Database connection failed."
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/health",
+  async (req, res) => {
+    if (!sql) {
+      return res.status(500).json({
+        ok: false,
+        service: "GoldAI API",
+        status: "online",
+        database: "missing",
+        ai: OPENAI_API_KEY
+          ? "configured"
+          : "missing",
+        error:
+          "No database connection string is available to this deployment."
+      });
+    }
+
+    try {
+      await sql`
+        SELECT 1 AS ok
+      `;
+
+      return res.json({
+        ok: true,
+        service: "GoldAI API",
+        status: "online",
+        database: "connected",
+        ai: OPENAI_API_KEY
+          ? "configured"
+          : "missing"
+      });
+    } catch (error) {
+      console.error(
+        "DATABASE HEALTH ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        service: "GoldAI API",
+        status: "online",
+        database: "error",
+        ai: OPENAI_API_KEY
+          ? "configured"
+          : "missing",
+        error:
+          error?.message ||
+          "Neon database connection failed."
+      });
+    }
+  }
+);
+
+app.get(
+  "/health",
+  (req, res) => {
+    res.json({
+      ok: true,
+      status: "online"
+    });
+  }
+);
+
+/*
+========================================================
+DATABASE MIDDLEWARE
+========================================================
+*/
+
 app.use(async (req, res, next) => {
+  /*
+  Health routes are already handled above.
+  */
   try {
     await ensureDatabase();
     next();
   } catch (error) {
-    console.error("DATABASE ERROR:", error);
+    console.error(
+      "DATABASE INITIALIZATION ERROR:",
+      error
+    );
 
     res.status(500).json({
-      error: "Database connection failed."
+      error:
+        error?.message ||
+        "Database initialization failed."
     });
   }
 });
 
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
+/*
+========================================================
+PASSWORD FUNCTIONS
+========================================================
+*/
 
-  const hash = crypto
-    .scryptSync(password, salt, 64)
-    .toString("hex");
+function hashPassword(password) {
+  const salt =
+    crypto
+      .randomBytes(16)
+      .toString("hex");
+
+  const hash =
+    crypto
+      .scryptSync(
+        password,
+        salt,
+        64
+      )
+      .toString("hex");
 
   return {
     salt,
@@ -178,21 +513,27 @@ function hashPassword(password) {
   };
 }
 
-function checkPassword(password, stored) {
+function checkPassword(
+  password,
+  stored
+) {
   try {
-    const calculated = crypto.scryptSync(
-      password,
-      stored.salt,
-      64
-    );
+    const calculated =
+      crypto.scryptSync(
+        password,
+        stored.salt,
+        64
+      );
 
-    const original = Buffer.from(
-      stored.hash,
-      "hex"
-    );
+    const original =
+      Buffer.from(
+        stored.hash,
+        "hex"
+      );
 
     return (
-      calculated.length === original.length &&
+      calculated.length ===
+        original.length &&
       crypto.timingSafeEqual(
         calculated,
         original
@@ -203,41 +544,74 @@ function checkPassword(password, stored) {
   }
 }
 
-function createToken(userId, role = "user") {
+/*
+========================================================
+SESSION
+========================================================
+*/
+
+function createToken(
+  userId,
+  role = "user"
+) {
   const payload = {
     userId,
     role,
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+    exp:
+      Date.now() +
+      7 *
+        24 *
+        60 *
+        60 *
+        1000
   };
 
-  const encoded = Buffer
-    .from(JSON.stringify(payload))
-    .toString("base64url");
+  const encoded =
+    Buffer
+      .from(
+        JSON.stringify(payload)
+      )
+      .toString("base64url");
 
-  const signature = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(encoded)
-    .digest("base64url");
+  const signature =
+    crypto
+      .createHmac(
+        "sha256",
+        SESSION_SECRET
+      )
+      .update(encoded)
+      .digest("base64url");
 
   return `${encoded}.${signature}`;
 }
 
 function getCookieToken(req) {
-  const header = req.headers.cookie || "";
+  const header =
+    req.headers.cookie || "";
 
   const cookies = {};
 
-  header.split(";").forEach((part) => {
-    const i = part.indexOf("=");
+  header
+    .split(";")
+    .forEach((part) => {
+      const i =
+        part.indexOf("=");
 
-    if (i === -1) return;
+      if (i === -1) {
+        return;
+      }
 
-    cookies[
-      part.slice(0, i).trim()
-    ] = part.slice(i + 1).trim();
-  });
+      cookies[
+        part.slice(0, i).trim()
+      ] =
+        part
+          .slice(i + 1)
+          .trim();
+    });
 
-  if (!cookies.goldai_session) {
+  if (
+    !cookies.goldai_session
+  ) {
     return null;
   }
 
@@ -252,13 +626,19 @@ function getCookieToken(req) {
 
 function getSession(req) {
   try {
-    const token = getCookieToken(req);
+    const token =
+      getCookieToken(req);
 
-    if (!token) return null;
+    if (!token) {
+      return null;
+    }
 
-    const parts = token.split(".");
+    const parts =
+      token.split(".");
 
-    if (parts.length !== 2) {
+    if (
+      parts.length !== 2
+    ) {
       return null;
     }
 
@@ -267,34 +647,44 @@ function getSession(req) {
       providedSignature
     ] = parts;
 
-    const expectedSignature = crypto
-      .createHmac(
-        "sha256",
-        SESSION_SECRET
-      )
-      .update(encoded)
-      .digest("base64url");
+    const expectedSignature =
+      crypto
+        .createHmac(
+          "sha256",
+          SESSION_SECRET
+        )
+        .update(encoded)
+        .digest("base64url");
 
-    const a = Buffer.from(
-      providedSignature
-    );
+    const a =
+      Buffer.from(
+        providedSignature
+      );
 
-    const b = Buffer.from(
-      expectedSignature
-    );
+    const b =
+      Buffer.from(
+        expectedSignature
+      );
 
     if (
       a.length !== b.length ||
-      !crypto.timingSafeEqual(a, b)
+      !crypto.timingSafeEqual(
+        a,
+        b
+      )
     ) {
       return null;
     }
 
-    const payload = JSON.parse(
-      Buffer
-        .from(encoded, "base64url")
-        .toString("utf8")
-    );
+    const payload =
+      JSON.parse(
+        Buffer
+          .from(
+            encoded,
+            "base64url"
+          )
+          .toString("utf8")
+      );
 
     if (
       !payload.exp ||
@@ -320,8 +710,11 @@ function setSessionCookie(
   token
 ) {
   const secure =
-    (req.headers["x-forwarded-proto"] || "") ===
-    "https"
+    (
+      req.headers[
+        "x-forwarded-proto"
+      ] || ""
+    ) === "https"
       ? "; Secure"
       : "";
 
@@ -333,10 +726,16 @@ function setSessionCookie(
   );
 }
 
-function clearSessionCookie(req, res) {
+function clearSessionCookie(
+  req,
+  res
+) {
   const secure =
-    (req.headers["x-forwarded-proto"] || "") ===
-    "https"
+    (
+      req.headers[
+        "x-forwarded-proto"
+      ] || ""
+    ) === "https"
       ? "; Secure"
       : "";
 
@@ -347,19 +746,30 @@ function clearSessionCookie(req, res) {
 }
 
 function formatUser(row) {
-  if (!row) return null;
+  if (!row) {
+    return null;
+  }
 
   return {
     id: row.id,
     name: row.name,
     email: row.email,
-    approved: Boolean(row.approved),
-    emailVerified: Boolean(
-      row.email_verified
-    ),
-    createdAt: row.created_at
+    approved:
+      Boolean(row.approved),
+    emailVerified:
+      Boolean(
+        row.email_verified
+      ),
+    createdAt:
+      row.created_at
   };
 }
+
+/*
+========================================================
+AUTH MIDDLEWARE
+========================================================
+*/
 
 async function requireUser(
   req,
@@ -367,27 +777,31 @@ async function requireUser(
   next
 ) {
   try {
-    const session = getSession(req);
+    const session =
+      getSession(req);
 
     if (
       !session ||
       session.role !== "user"
     ) {
       return res.status(401).json({
-        error: "Not authenticated."
+        error:
+          "Not authenticated."
       });
     }
 
-    const rows = await sql`
-      SELECT *
-      FROM users
-      WHERE id = ${session.userId}
-      LIMIT 1
-    `;
+    const rows =
+      await sql`
+        SELECT *
+        FROM users
+        WHERE id = ${session.userId}
+        LIMIT 1
+      `;
 
     if (!rows.length) {
       return res.status(401).json({
-        error: "User not found."
+        error:
+          "User not found."
       });
     }
 
@@ -401,7 +815,8 @@ async function requireUser(
     );
 
     res.status(500).json({
-      error: "Authentication failed."
+      error:
+        "Authentication failed."
     });
   }
 }
@@ -412,27 +827,31 @@ async function requireApprovedUser(
   next
 ) {
   try {
-    const session = getSession(req);
+    const session =
+      getSession(req);
 
     if (
       !session ||
       session.role !== "user"
     ) {
       return res.status(401).json({
-        error: "Not authenticated."
+        error:
+          "Not authenticated."
       });
     }
 
-    const rows = await sql`
-      SELECT *
-      FROM users
-      WHERE id = ${session.userId}
-      LIMIT 1
-    `;
+    const rows =
+      await sql`
+        SELECT *
+        FROM users
+        WHERE id = ${session.userId}
+        LIMIT 1
+      `;
 
     if (!rows.length) {
       return res.status(401).json({
-        error: "User not found."
+        error:
+          "User not found."
       });
     }
 
@@ -464,7 +883,8 @@ function requireAdmin(
   res,
   next
 ) {
-  const session = getSession(req);
+  const session =
+    getSession(req);
 
   if (
     !session ||
@@ -479,89 +899,56 @@ function requireAdmin(
   next();
 }
 
-const upload = multer({
-  storage: multer.memoryStorage(),
+/*
+========================================================
+UPLOAD
+========================================================
+*/
 
-  limits: {
-    fileSize: 5 * 1024 * 1024
-  },
+const upload =
+  multer({
+    storage:
+      multer.memoryStorage(),
 
-  fileFilter: (
-    req,
-    file,
-    cb
-  ) => {
-    const allowed = [
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-      "image/gif"
-    ];
+    limits: {
+      fileSize:
+        5 * 1024 * 1024
+    },
 
-    if (
-      !allowed.includes(
-        file.mimetype
-      )
-    ) {
-      return cb(
-        new Error(
-          "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
-        )
-      );
-    }
+    fileFilter:
+      (
+        req,
+        file,
+        cb
+      ) => {
+        const allowed = [
+          "image/png",
+          "image/jpeg",
+          "image/webp",
+          "image/gif"
+        ];
 
-    cb(null, true);
-  }
-});
+        if (
+          !allowed.includes(
+            file.mimetype
+          )
+        ) {
+          return cb(
+            new Error(
+              "Only PNG, JPG, JPEG, WEBP and GIF images are allowed."
+            )
+          );
+        }
 
-app.get("/", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online"
+        cb(null, true);
+      }
   });
-});
 
-app.get("/api", (req, res) => {
-  res.json({
-    ok: true,
-    service: "GoldAI API",
-    status: "online",
-    database: DATABASE_URL
-      ? "neon"
-      : "missing",
-    ai: OPENAI_API_KEY
-      ? "configured"
-      : "missing"
-  });
-});
-
-app.get(
-  "/api/health",
-  (req, res) => {
-    res.json({
-      ok: true,
-      service: "GoldAI API",
-      status: "online",
-      database: DATABASE_URL
-        ? "neon"
-        : "missing",
-      ai: OPENAI_API_KEY
-        ? "configured"
-        : "missing"
-    });
-  }
-);
-
-app.get(
-  "/health",
-  (req, res) => {
-    res.json({
-      ok: true,
-      status: "online"
-    });
-  }
-);
+/*
+========================================================
+REGISTER
+========================================================
+*/
 
 app.post(
   "/api/register",
@@ -657,9 +1044,10 @@ app.post(
       res.json({
         ok: true,
         loggedIn: true,
-        user: formatUser(
-          rows[0]
-        )
+        user:
+          formatUser(
+            rows[0]
+          )
       });
     } catch (error) {
       console.error(
@@ -674,6 +1062,12 @@ app.post(
     }
   }
 );
+
+/*
+========================================================
+LOGIN
+========================================================
+*/
 
 app.post(
   "/api/login",
@@ -691,7 +1085,10 @@ app.post(
           req.body?.password || ""
         );
 
-      if (!email || !password) {
+      if (
+        !email ||
+        !password
+      ) {
         return res.status(400).json({
           error:
             "Email and password are required."
@@ -706,7 +1103,8 @@ app.post(
           LIMIT 1
         `;
 
-      const user = rows[0];
+      const user =
+        rows[0];
 
       if (
         !user ||
@@ -738,9 +1136,10 @@ app.post(
       res.json({
         ok: true,
         loggedIn: true,
-        user: formatUser(
-          user
-        )
+        user:
+          formatUser(
+            user
+          )
       });
     } catch (error) {
       console.error(
@@ -749,11 +1148,18 @@ app.post(
       );
 
       res.status(500).json({
-        error: "Login failed."
+        error:
+          "Login failed."
       });
     }
   }
 );
+
+/*
+========================================================
+LOGOUT
+========================================================
+*/
 
 app.post(
   "/api/logout",
@@ -769,6 +1175,12 @@ app.post(
     });
   }
 );
+
+/*
+========================================================
+CURRENT USER
+========================================================
+*/
 
 app.get(
   "/api/me",
@@ -819,9 +1231,10 @@ app.get(
       res.json({
         loggedIn: true,
         role: "user",
-        user: formatUser(
-          rows[0]
-        )
+        user:
+          formatUser(
+            rows[0]
+          )
       });
     } catch (error) {
       console.error(
@@ -837,10 +1250,18 @@ app.get(
   }
 );
 
+/*
+========================================================
+PAYMENT
+========================================================
+*/
+
 app.post(
   "/api/payment",
   requireUser,
-  upload.single("receipt"),
+  upload.single(
+    "receipt"
+  ),
   async (req, res) => {
     try {
       if (req.user.approved) {
@@ -877,8 +1298,10 @@ app.post(
       }
 
       if (
-        method !== "hesabpay" &&
-        method !== "binance"
+        method !==
+          "hesabpay" &&
+        method !==
+          "binance"
       ) {
         return res.status(400).json({
           error:
@@ -945,7 +1368,8 @@ app.post(
 
       res.json({
         ok: true,
-        payment: rows[0]
+        payment:
+          rows[0]
       });
     } catch (error) {
       console.error(
@@ -961,6 +1385,12 @@ app.post(
     }
   }
 );
+
+/*
+========================================================
+ACCESS
+========================================================
+*/
 
 app.get(
   "/api/access",
@@ -1016,6 +1446,12 @@ app.get(
   }
 );
 
+/*
+========================================================
+SIGNALS
+========================================================
+*/
+
 app.get(
   "/api/signals",
   requireApprovedUser,
@@ -1047,6 +1483,12 @@ app.get(
   }
 );
 
+/*
+========================================================
+SUPPORT
+========================================================
+*/
+
 app.post(
   "/api/support",
   requireApprovedUser,
@@ -1064,7 +1506,9 @@ app.post(
         });
       }
 
-      if (message.length > 5000) {
+      if (
+        message.length > 5000
+      ) {
         return res.status(400).json({
           error:
             "Message is too long."
@@ -1086,7 +1530,8 @@ app.post(
 
       res.json({
         ok: true,
-        message: rows[0]
+        message:
+          rows[0]
       });
     } catch (error) {
       console.error(
@@ -1102,11 +1547,19 @@ app.post(
   }
 );
 
+/*
+========================================================
+TIMEFRAME
+========================================================
+*/
+
 function normalizeTimeframe(
   value
 ) {
   const v =
-    String(value || "")
+    String(
+      value || ""
+    )
       .trim()
       .toLowerCase();
 
@@ -1146,10 +1599,18 @@ function normalizeTimeframe(
   return null;
 }
 
+/*
+========================================================
+AI JSON HELPERS
+========================================================
+*/
+
 function findJsonObject(
   text
 ) {
-  if (!text) return null;
+  if (!text) {
+    return null;
+  }
 
   const cleaned =
     String(text)
@@ -1164,7 +1625,9 @@ function findJsonObject(
       .trim();
 
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(
+      cleaned
+    );
   } catch {}
 
   const first =
@@ -1195,7 +1658,9 @@ function findJsonObject(
 function extractResponseText(
   data
 ) {
-  if (!data) return "";
+  if (!data) {
+    return "";
+  }
 
   if (
     typeof data.output_text ===
@@ -1265,8 +1730,11 @@ function normalizeAnalysis(
       : "Low";
 
   return {
-    symbol: "XAUUSD",
+    symbol:
+      "XAUUSD",
+
     timeframe,
+
     direction,
 
     entry:
@@ -1304,6 +1772,12 @@ function normalizeAnalysis(
   };
 }
 
+/*
+========================================================
+OPENAI REQUEST
+========================================================
+*/
+
 async function requestAIAnalysis(
   imageUrl,
   prompt
@@ -1322,34 +1796,39 @@ async function requestAIAnalysis(
             `Bearer ${OPENAI_API_KEY}`
         },
 
-        body: JSON.stringify({
-          model: AI_MODEL,
+        body:
+          JSON.stringify({
+            model:
+              AI_MODEL,
 
-          input: [
-            {
-              role: "user",
+            input: [
+              {
+                role:
+                  "user",
 
-              content: [
-                {
-                  type:
-                    "input_text",
+                content: [
+                  {
+                    type:
+                      "input_text",
 
-                  text: prompt
-                },
+                    text:
+                      prompt
+                  },
 
-                {
-                  type:
-                    "input_image",
+                  {
+                    type:
+                      "input_image",
 
-                  image_url:
-                    imageUrl,
+                    image_url:
+                      imageUrl,
 
-                  detail: "high"
-                }
-              ]
-            }
-          ]
-        })
+                    detail:
+                      "high"
+                  }
+                ]
+              }
+            ]
+          })
       }
     );
 
@@ -1373,13 +1852,23 @@ async function requestAIAnalysis(
   };
 }
 
+/*
+========================================================
+ANALYZE CHART
+========================================================
+*/
+
 app.post(
   "/api/analyze-chart",
   requireApprovedUser,
-  upload.single("chart"),
+  upload.single(
+    "chart"
+  ),
   async (req, res) => {
     try {
-      if (!OPENAI_API_KEY) {
+      if (
+        !OPENAI_API_KEY
+      ) {
         return res.status(500).json({
           error:
             "OPENAI_API_KEY is not configured."
@@ -1590,11 +2079,9 @@ Write analysis and warning in ${languageName}.
         );
 
       /*
-        IMPORTANT:
-        Do NOT provide id here.
-
-        PostgreSQL will now generate it automatically
-        using analyses_id_seq when required.
+      IMPORTANT:
+      id is intentionally NOT supplied.
+      PostgreSQL generates it automatically.
       */
 
       const saved =
@@ -1620,13 +2107,27 @@ Write analysis and warning in ${languageName}.
             ${result.symbol},
             ${result.timeframe},
             ${result.direction},
-            ${String(result.entry)},
-            ${String(result.tp1)},
-            ${String(result.tp2)},
-            ${String(result.tp3)},
-            ${String(result.tp4)},
-            ${String(result.tp5)},
-            ${String(result.sl)},
+            ${String(
+              result.entry
+            )},
+            ${String(
+              result.tp1
+            )},
+            ${String(
+              result.tp2
+            )},
+            ${String(
+              result.tp3
+            )},
+            ${String(
+              result.tp4
+            )},
+            ${String(
+              result.tp5
+            )},
+            ${String(
+              result.sl
+            )},
             ${result.confidence},
             ${result.analysis},
             ${result.warning}
@@ -1636,8 +2137,10 @@ Write analysis and warning in ${languageName}.
 
       res.json({
         ok: true,
-        analysis: result,
-        saved: saved[0]
+        analysis:
+          result,
+        saved:
+          saved[0]
       });
     } catch (error) {
       console.error(
@@ -1653,6 +2156,12 @@ Write analysis and warning in ${languageName}.
     }
   }
 );
+
+/*
+========================================================
+ANALYSIS HISTORY
+========================================================
+*/
 
 app.get(
   "/api/analyses",
@@ -1670,7 +2179,8 @@ app.get(
 
       res.json({
         ok: true,
-        analyses: rows
+        analyses:
+          rows
       });
     } catch (error) {
       console.error(
@@ -1685,6 +2195,12 @@ app.get(
     }
   }
 );
+
+/*
+========================================================
+ADMIN LOGIN
+========================================================
+*/
 
 app.post(
   "/api/admin/login",
@@ -1722,6 +2238,12 @@ app.post(
   }
 );
 
+/*
+========================================================
+ADMIN LOGOUT
+========================================================
+*/
+
 app.post(
   "/api/admin/logout",
   (req, res) => {
@@ -1737,6 +2259,12 @@ app.post(
   }
 );
 
+/*
+========================================================
+ADMIN ME
+========================================================
+*/
+
 app.get(
   "/api/admin/me",
   requireAdmin,
@@ -1748,6 +2276,12 @@ app.get(
     });
   }
 );
+
+/*
+========================================================
+ADMIN DATA
+========================================================
+*/
 
 app.get(
   "/api/admin/data",
@@ -1830,6 +2364,12 @@ app.get(
   }
 );
 
+/*
+========================================================
+ADMIN RECEIPT
+========================================================
+*/
+
 app.get(
   "/api/admin/payment/:id/receipt",
   requireAdmin,
@@ -1901,6 +2441,12 @@ app.get(
   }
 );
 
+/*
+========================================================
+ADMIN APPROVE PAYMENT
+========================================================
+*/
+
 app.post(
   "/api/admin/payment/:id/approve",
   requireAdmin,
@@ -1928,7 +2474,9 @@ app.post(
           LIMIT 1
         `;
 
-      if (!paymentRows.length) {
+      if (
+        !paymentRows.length
+      ) {
         return res.status(404).json({
           error:
             "Payment not found."
@@ -1974,7 +2522,8 @@ app.post(
 
       res.json({
         ok: true,
-        payment: rows[0]
+        payment:
+          rows[0]
       });
     } catch (error) {
       console.error(
@@ -1989,6 +2538,12 @@ app.post(
     }
   }
 );
+
+/*
+========================================================
+ADMIN REJECT PAYMENT
+========================================================
+*/
 
 app.post(
   "/api/admin/payment/:id/reject",
@@ -2028,7 +2583,8 @@ app.post(
 
       res.json({
         ok: true,
-        payment: rows[0]
+        payment:
+          rows[0]
       });
     } catch (error) {
       console.error(
@@ -2043,6 +2599,12 @@ app.post(
     }
   }
 );
+
+/*
+========================================================
+ADMIN MANUAL USER APPROVAL
+========================================================
+*/
 
 app.post(
   "/api/admin/user/:id/approve",
@@ -2086,7 +2648,8 @@ app.post(
 
       res.json({
         ok: true,
-        user: rows[0]
+        user:
+          rows[0]
       });
     } catch (error) {
       console.error(
@@ -2101,6 +2664,12 @@ app.post(
     }
   }
 );
+
+/*
+========================================================
+ADMIN CREATE SIGNAL
+========================================================
+*/
 
 app.post(
   "/api/admin/signals",
@@ -2117,7 +2686,10 @@ app.post(
           req.body?.body || ""
         ).trim();
 
-      if (!title || !body) {
+      if (
+        !title ||
+        !body
+      ) {
         return res.status(400).json({
           error:
             "Title and body are required."
@@ -2139,7 +2711,8 @@ app.post(
 
       res.json({
         ok: true,
-        signal: rows[0]
+        signal:
+          rows[0]
       });
     } catch (error) {
       console.error(
@@ -2154,6 +2727,12 @@ app.post(
     }
   }
 );
+
+/*
+========================================================
+ADMIN DELETE SIGNAL
+========================================================
+*/
 
 app.delete(
   "/api/admin/signals/:id",
@@ -2196,6 +2775,12 @@ app.delete(
   }
 );
 
+/*
+========================================================
+GLOBAL ERROR HANDLER
+========================================================
+*/
+
 app.use(
   (
     error,
@@ -2236,5 +2821,11 @@ app.use(
     });
   }
 );
+
+/*
+========================================================
+EXPORT
+========================================================
+*/
 
 module.exports = app;
