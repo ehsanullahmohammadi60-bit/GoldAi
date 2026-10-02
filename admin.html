@@ -1,23 +1,1106 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GoldAI Admin</title><link rel="stylesheet" href="styles.css"></head><body><main>
-<div id="login" class="panel"><h1>GoldAI Admin</h1><input id="ap" type="password" placeholder="Admin password"><button id="al">Login</button><p id="am" class="msg"></p></div>
-<div id="admin" class="hidden"><div class="row"><h1>Admin Dashboard</h1><button id="logout" class="ghost">Logout</button></div><div class="panel"><h2>Pending Payments</h2><div id="payments"></div></div>
-<div class="panel"><h2>Publish XAUUSD Signal</h2><input id="st" placeholder="Title e.g. XAUUSD SELL NOW"><textarea id="sb" placeholder="Signal body, for example:
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoldAI Admin</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    .hidden {
+      display: none !important;
+    }
+
+    .adminHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .adminStats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .adminStat {
+      padding: 18px;
+      border-radius: 14px;
+    }
+
+    .adminStat small {
+      display: block;
+      margin-bottom: 8px;
+      opacity: 0.75;
+    }
+
+    .adminStat strong {
+      font-size: 28px;
+    }
+
+    .adminItem {
+      margin-bottom: 14px;
+      padding: 16px;
+      border-radius: 14px;
+    }
+
+    .adminItem:last-child {
+      margin-bottom: 0;
+    }
+
+    .adminItem small {
+      display: block;
+      margin-top: 6px;
+      opacity: 0.75;
+    }
+
+    .adminItem p {
+      white-space: pre-wrap;
+      line-height: 1.7;
+    }
+
+    .adminActions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .adminActions button {
+      width: auto;
+      min-width: 100px;
+    }
+
+    .statusApproved {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .statusPending {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .statusRejected {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .empty {
+      opacity: 0.7;
+      padding: 12px 0;
+    }
+
+    @media (max-width: 700px) {
+      .adminStats {
+        grid-template-columns: 1fr;
+      }
+
+      .adminHeader {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <!-- ADMIN LOGIN -->
+  <section id="login" class="panel">
+
+    <h1>GoldAI Admin</h1>
+
+    <p>
+      Admin login
+    </p>
+
+    <input
+      id="ap"
+      type="password"
+      placeholder="Admin password"
+      autocomplete="current-password"
+    >
+
+    <button
+      id="al"
+      type="button"
+    >
+      Login
+    </button>
+
+    <p
+      id="am"
+      class="msg"
+    ></p>
+
+  </section>
+
+
+  <!-- ADMIN DASHBOARD -->
+  <section
+    id="admin"
+    class="hidden"
+  >
+
+    <!-- HEADER -->
+    <div class="adminHeader">
+
+      <div>
+        <div class="miniLabel">
+          GOLD AI
+        </div>
+
+        <h1>
+          Admin Dashboard
+        </h1>
+      </div>
+
+      <button
+        id="logout"
+        class="ghost"
+        type="button"
+      >
+        Logout
+      </button>
+
+    </div>
+
+
+    <!-- STATS -->
+    <div class="adminStats">
+
+      <div class="card adminStat">
+        <small>
+          Total Users
+        </small>
+
+        <strong id="totalUsers">
+          0
+        </strong>
+      </div>
+
+
+      <div class="card adminStat">
+        <small>
+          Pending Payments
+        </small>
+
+        <strong id="pendingPayments">
+          0
+        </strong>
+      </div>
+
+
+      <div class="card adminStat">
+        <small>
+          Approved Users
+        </small>
+
+        <strong id="approvedUsers">
+          0
+        </strong>
+      </div>
+
+    </div>
+
+
+    <!-- PAYMENTS -->
+    <section class="panel">
+
+      <div class="sectionTitle">
+
+        <div>
+          <div class="miniLabel">
+            MEMBERSHIP
+          </div>
+
+          <h2>
+            Payment Requests
+          </h2>
+        </div>
+
+      </div>
+
+      <div id="payments">
+        <div class="empty">
+          Loading...
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- PUBLISH SIGNAL -->
+    <section class="panel">
+
+      <div class="sectionTitle">
+
+        <div>
+          <div class="miniLabel">
+            XAUUSD
+          </div>
+
+          <h2>
+            Publish XAUUSD Signal
+          </h2>
+        </div>
+
+      </div>
+
+
+      <input
+        id="st"
+        type="text"
+        placeholder="Title e.g. XAUUSD SELL NOW"
+      >
+
+
+      <textarea
+        id="sb"
+        rows="8"
+        placeholder="Signal body, for example:
+
 XAUUSD SELL 4395
+
 TP1 4393
 TP2 4391
-SL 4405"></textarea><button id="publish">Publish signal</button><p id="pm" class="msg"></p></div>
-<div class="panel"><h2>Published Signals</h2><div id="signals"></div></div><div class="panel"><h2>Support Messages</h2><div id="support"></div></div></div></main>
+TP3 4389
+TP4 4387
+TP5 4385
+
+SL 4405"
+      ></textarea>
+
+
+      <button
+        id="publish"
+        type="button"
+      >
+        Publish Signal
+      </button>
+
+
+      <p
+        id="pm"
+        class="msg"
+      ></p>
+
+    </section>
+
+
+    <!-- PUBLISHED SIGNALS -->
+    <section class="panel">
+
+      <div class="sectionTitle">
+
+        <div>
+          <div class="miniLabel">
+            PRIVATE FEED
+          </div>
+
+          <h2>
+            Published Signals
+          </h2>
+        </div>
+
+      </div>
+
+      <div id="signals">
+        <div class="empty">
+          Loading...
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- SUPPORT -->
+    <section class="panel">
+
+      <div class="sectionTitle">
+
+        <div>
+          <div class="miniLabel">
+            SUPPORT
+          </div>
+
+          <h2>
+            Support Messages
+          </h2>
+        </div>
+
+      </div>
+
+      <div id="support">
+        <div class="empty">
+          Loading...
+        </div>
+      </div>
+
+    </section>
+
+  </section>
+
+</main>
+
+
 <script>
-const $=s=>document.querySelector(s);async function api(u,o={}){let r=await fetch(u,o),j={};try{j=await r.json()}catch{}if(!r.ok)throw Error(j.error||"Request failed");return j}
-async function load(){try{let d=await api("/api/admin/data");$("#login").classList.add("hidden");$("#admin").classList.remove("hidden");
-$("#payments").innerHTML=d.payments.length?d.payments.map(p=>`<div class="card"><b>${p.userName}</b><small>${p.userEmail} • ${p.amount} • ${p.method}</small><p>Reference: <strong>${esc(p.reference)}</strong><br>Status: ${p.status}<br><a href="${p.receipt}" target="_blank">Open receipt</a></p>${p.status==="pending"?`<button onclick="act('${p.id}','approve')">Approve</button> <button class="ghost" onclick="act('${p.id}','reject')">Reject</button>`:""}</div>`).join(""):"No payments yet.";
-$("#signals").innerHTML=d.signals.map(s=>`<div class="signal"><b>${esc(s.title)}</b><br>${esc(s.body)}<br><button class="ghost" onclick="del('${s.id}')">Delete</button></div>`).join("")||"No signals.";
-$("#support").innerHTML=d.support.map(s=>`<div class="card"><b>${esc(s.userEmail)}</b><p>${esc(s.message)}</p></div>`).join("")||"No messages.";
-}catch(e){$("#login").classList.remove("hidden");$("#admin").classList.add("hidden")}}
-window.act=async(id,a)=>{await api("/api/admin/payments/"+id+"/"+a,{method:"POST"});load()}
-window.del=async(id)=>{await api("/api/admin/signals/"+id,{method:"DELETE"});load()}
-$("#al").onclick=async()=>{try{await api("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("#ap").value})});load()}catch(e){$("#am").textContent=e.message}}
-$("#logout").onclick=async()=>{await api("/api/logout",{method:"POST"});location.reload()}
-$("#publish").onclick=async()=>{try{await api("/api/admin/signals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:$("#st").value,body:$("#sb").value})});$("#st").value="";$("#sb").value="";$("#pm").textContent="Published.";load()}catch(e){$("#pm").textContent=e.message}}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}load();
-</script></body></html>
+
+  /* =====================================================
+     HELPERS
+  ===================================================== */
+
+  const $ = (selector) =>
+    document.querySelector(selector);
+
+
+  async function api(
+    url,
+    options = {}
+  ) {
+
+    const response =
+      await fetch(
+        url,
+        {
+          credentials: "same-origin",
+          ...options
+        }
+      );
+
+    let data = {};
+
+    try {
+      data =
+        await response.json();
+    } catch (_) {
+      data = {};
+    }
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Request failed."
+      );
+    }
+
+    return data;
+  }
+
+
+  function esc(value) {
+
+    return String(
+      value ?? ""
+    ).replace(
+      /[&<>"']/g,
+      (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char])
+    );
+  }
+
+
+  function formatDate(value) {
+
+    if (!value) {
+      return "";
+    }
+
+    try {
+
+      return new Date(
+        value
+      ).toLocaleString();
+
+    } catch (_) {
+
+      return String(value);
+
+    }
+  }
+
+
+  function paymentStatus(status) {
+
+    if (status === "approved") {
+
+      return `
+        <span class="statusApproved">
+          APPROVED
+        </span>
+      `;
+    }
+
+    if (status === "rejected") {
+
+      return `
+        <span class="statusRejected">
+          REJECTED
+        </span>
+      `;
+    }
+
+    return `
+      <span class="statusPending">
+        PENDING
+      </span>
+    `;
+  }
+
+
+  /* =====================================================
+     LOAD ADMIN DATA
+  ===================================================== */
+
+  async function load() {
+
+    try {
+
+      const data =
+        await api(
+          "/api/admin/data"
+        );
+
+
+      /* -----------------------------------------------
+         SHOW ADMIN
+      ------------------------------------------------ */
+
+      $("#login")
+        .classList
+        .add("hidden");
+
+      $("#admin")
+        .classList
+        .remove("hidden");
+
+
+      const users =
+        Array.isArray(data.users)
+          ? data.users
+          : [];
+
+
+      const payments =
+        Array.isArray(data.payments)
+          ? data.payments
+          : [];
+
+
+      const signals =
+        Array.isArray(data.signals)
+          ? data.signals
+          : [];
+
+
+      const support =
+        Array.isArray(data.support)
+          ? data.support
+          : [];
+
+
+      /* -----------------------------------------------
+         STATS
+      ------------------------------------------------ */
+
+      $("#totalUsers")
+        .textContent =
+          users.length;
+
+
+      $("#pendingPayments")
+        .textContent =
+          payments.filter(
+            (payment) =>
+              payment.status ===
+              "pending"
+          ).length;
+
+
+      $("#approvedUsers")
+        .textContent =
+          users.filter(
+            (user) =>
+              user.approved === true
+          ).length;
+
+
+      /* -----------------------------------------------
+         PAYMENTS
+      ------------------------------------------------ */
+
+      if (!payments.length) {
+
+        $("#payments").innerHTML =
+          `<div class="empty">No payment requests yet.</div>`;
+
+      } else {
+
+        $("#payments").innerHTML =
+          payments
+            .map(
+              (payment) => {
+
+                const userName =
+                  payment.name ||
+                  payment.userName ||
+                  "Unknown User";
+
+                const userEmail =
+                  payment.email ||
+                  payment.userEmail ||
+                  "Unknown Email";
+
+                const amount =
+                  payment.amount ||
+                  "";
+
+                const method =
+                  payment.method ||
+                  "";
+
+                const reference =
+                  payment.reference ||
+                  "";
+
+                const createdAt =
+                  payment.created_at ||
+                  payment.createdAt ||
+                  "";
+
+                return `
+                  <div class="card adminItem">
+
+                    <b>
+                      ${esc(userName)}
+                    </b>
+
+                    <small>
+                      ${esc(userEmail)}
+                    </small>
+
+                    <p>
+                      <strong>Method:</strong>
+                      ${esc(method)}
+                      <br>
+
+                      <strong>Amount:</strong>
+                      ${esc(amount)}
+                      <br>
+
+                      <strong>Reference:</strong>
+                      ${esc(reference)}
+                      <br>
+
+                      <strong>Status:</strong>
+                      ${paymentStatus(
+                        payment.status
+                      )}
+                      <br>
+
+                      <strong>Date:</strong>
+                      ${esc(
+                        formatDate(
+                          createdAt
+                        )
+                      )}
+                    </p>
+
+
+                    <div class="adminActions">
+
+                      <a
+                        href="/api/admin/payment/${encodeURIComponent(payment.id)}/receipt"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <button
+                          type="button"
+                        >
+                          Open Receipt
+                        </button>
+                      </a>
+
+
+                      ${
+                        payment.status ===
+                        "pending"
+                          ? `
+                            <button
+                              type="button"
+                              onclick="act('${esc(payment.id)}','approve')"
+                            >
+                              Approve
+                            </button>
+
+                            <button
+                              type="button"
+                              class="ghost"
+                              onclick="act('${esc(payment.id)}','reject')"
+                            >
+                              Reject
+                            </button>
+                          `
+                          : ""
+                      }
+
+                    </div>
+
+                  </div>
+                `;
+              }
+            )
+            .join("");
+      }
+
+
+      /* -----------------------------------------------
+         SIGNALS
+      ------------------------------------------------ */
+
+      if (!signals.length) {
+
+        $("#signals").innerHTML =
+          `<div class="empty">No signals published yet.</div>`;
+
+      } else {
+
+        $("#signals").innerHTML =
+          signals
+            .map(
+              (signal) => {
+
+                const title =
+                  signal.title ||
+                  "XAUUSD Signal";
+
+                const body =
+                  signal.body ||
+                  "";
+
+                const createdAt =
+                  signal.created_at ||
+                  signal.createdAt ||
+                  "";
+
+                return `
+                  <div class="card adminItem">
+
+                    <b>
+                      ${esc(title)}
+                    </b>
+
+                    <small>
+                      ${esc(
+                        formatDate(
+                          createdAt
+                        )
+                      )}
+                    </small>
+
+                    <p>
+                      ${esc(body)}
+                    </p>
+
+                    <div class="adminActions">
+
+                      <button
+                        type="button"
+                        class="ghost"
+                        onclick="del('${esc(signal.id)}')"
+                      >
+                        Delete
+                      </button>
+
+                    </div>
+
+                  </div>
+                `;
+              }
+            )
+            .join("");
+      }
+
+
+      /* -----------------------------------------------
+         SUPPORT
+      ------------------------------------------------ */
+
+      if (!support.length) {
+
+        $("#support").innerHTML =
+          `<div class="empty">No support messages yet.</div>`;
+
+      } else {
+
+        $("#support").innerHTML =
+          support
+            .map(
+              (message) => {
+
+                const name =
+                  message.name ||
+                  "User";
+
+                const email =
+                  message.email ||
+                  message.userEmail ||
+                  "";
+
+                const body =
+                  message.message ||
+                  "";
+
+                const createdAt =
+                  message.created_at ||
+                  message.createdAt ||
+                  "";
+
+                return `
+                  <div class="card adminItem">
+
+                    <b>
+                      ${esc(name)}
+                    </b>
+
+                    <small>
+                      ${esc(email)}
+                    </small>
+
+                    <small>
+                      ${esc(
+                        formatDate(
+                          createdAt
+                        )
+                      )}
+                    </small>
+
+                    <p>
+                      ${esc(body)}
+                    </p>
+
+                  </div>
+                `;
+              }
+            )
+            .join("");
+      }
+
+
+    } catch (error) {
+
+      $("#login")
+        .classList
+        .remove("hidden");
+
+      $("#admin")
+        .classList
+        .add("hidden");
+
+    }
+
+  }
+
+
+  /* =====================================================
+     APPROVE / REJECT PAYMENT
+  ===================================================== */
+
+  window.act =
+    async function (
+      id,
+      action
+    ) {
+
+      try {
+
+        await api(
+          "/api/admin/payment/" +
+          encodeURIComponent(id) +
+          "/" +
+          action,
+          {
+            method: "POST"
+          }
+        );
+
+        await load();
+
+      } catch (error) {
+
+        alert(
+          error.message ||
+          "Action failed."
+        );
+
+      }
+
+    };
+
+
+  /* =====================================================
+     DELETE SIGNAL
+  ===================================================== */
+
+  window.del =
+    async function (
+      id
+    ) {
+
+      try {
+
+        await api(
+          "/api/admin/signals/" +
+          encodeURIComponent(id),
+          {
+            method: "DELETE"
+          }
+        );
+
+        await load();
+
+      } catch (error) {
+
+        alert(
+          error.message ||
+          "Could not delete signal."
+        );
+
+      }
+
+    };
+
+
+  /* =====================================================
+     ADMIN LOGIN
+  ===================================================== */
+
+  $("#al")
+    .addEventListener(
+      "click",
+      async () => {
+
+        const password =
+          $("#ap").value;
+
+        if (!password) {
+
+          $("#am")
+            .textContent =
+            "Please enter the admin password.";
+
+          return;
+        }
+
+
+        $("#al")
+          .disabled = true;
+
+
+        $("#am")
+          .textContent =
+          "Logging in...";
+
+
+        try {
+
+          await api(
+            "/api/admin/login",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+
+              body:
+                JSON.stringify({
+                  password
+                })
+            }
+          );
+
+
+          $("#am")
+            .textContent = "";
+
+          await load();
+
+
+        } catch (error) {
+
+          $("#am")
+            .textContent =
+            error.message ||
+            "Admin login failed.";
+
+        } finally {
+
+          $("#al")
+            .disabled = false;
+
+        }
+
+      }
+    );
+
+
+  /* =====================================================
+     ADMIN LOGOUT
+  ===================================================== */
+
+  $("#logout")
+    .addEventListener(
+      "click",
+      async () => {
+
+        try {
+
+          await api(
+            "/api/logout",
+            {
+              method: "POST"
+            }
+          );
+
+        } finally {
+
+          location.reload();
+
+        }
+
+      }
+    );
+
+
+  /* =====================================================
+     PUBLISH SIGNAL
+  ===================================================== */
+
+  $("#publish")
+    .addEventListener(
+      "click",
+      async () => {
+
+        const title =
+          $("#st")
+            .value
+            .trim();
+
+        const body =
+          $("#sb")
+            .value
+            .trim();
+
+
+        if (!title) {
+
+          $("#pm")
+            .textContent =
+            "Please enter a signal title.";
+
+          return;
+        }
+
+
+        if (!body) {
+
+          $("#pm")
+            .textContent =
+            "Please enter the signal.";
+
+          return;
+        }
+
+
+        $("#publish")
+          .disabled = true;
+
+
+        $("#pm")
+          .textContent =
+          "Publishing...";
+
+
+        try {
+
+          await api(
+            "/api/admin/signals",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+
+              body:
+                JSON.stringify({
+                  title,
+                  body
+                })
+            }
+          );
+
+
+          $("#st")
+            .value = "";
+
+          $("#sb")
+            .value = "";
+
+          $("#pm")
+            .textContent =
+            "Signal published successfully.";
+
+
+          await load();
+
+
+        } catch (error) {
+
+          $("#pm")
+            .textContent =
+            error.message ||
+            "Could not publish signal.";
+
+        } finally {
+
+          $("#publish")
+            .disabled = false;
+
+        }
+
+      }
+    );
+
+
+  /* =====================================================
+     INITIAL LOAD
+  ===================================================== */
+
+  load();
+
+</script>
+
+</body>
+</html>
