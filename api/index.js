@@ -125,17 +125,6 @@ async function ensureDatabase() {
         )
       `;
 
-      /*
-       * IMPORTANT
-       *
-       * The existing Neon database may already have an old
-       * analyses table where id is NOT NULL but has no DEFAULT.
-       *
-       * We do NOT use COALESCE(MAX(id), 0) globally.
-       * That caused the previous TEXT/INTEGER COALESCE error.
-       *
-       * We add the probability field safely.
-       */
       await sql`
         ALTER TABLE analyses
         ADD COLUMN IF NOT EXISTS signal_probability TEXT
@@ -273,9 +262,7 @@ app.use(async (req, res, next) => {
 
 function hashPassword(password) {
   const salt =
-    crypto
-      .randomBytes(16)
-      .toString("hex");
+    crypto.randomBytes(16).toString("hex");
 
   const hash =
     crypto
@@ -292,10 +279,7 @@ function hashPassword(password) {
   };
 }
 
-function checkPassword(
-  password,
-  stored
-) {
+function checkPassword(password, stored) {
   try {
     const calculated =
       crypto.scryptSync(
@@ -311,8 +295,7 @@ function checkPassword(
       );
 
     return (
-      calculated.length ===
-        original.length &&
+      calculated.length === original.length &&
       crypto.timingSafeEqual(
         calculated,
         original
@@ -327,10 +310,7 @@ function checkPassword(
    SESSION
 ===================================================== */
 
-function createToken(
-  userId,
-  role = "user"
-) {
+function createToken(userId, role = "user") {
   const payload = {
     userId,
     role,
@@ -345,9 +325,7 @@ function createToken(
 
   const encoded =
     Buffer
-      .from(
-        JSON.stringify(payload)
-      )
+      .from(JSON.stringify(payload))
       .toString("base64url");
 
   const signature =
@@ -359,11 +337,7 @@ function createToken(
       .update(encoded)
       .digest("base64url");
 
-  return (
-    encoded +
-    "." +
-    signature
-  );
+  return encoded + "." + signature;
 }
 
 function getCookieToken(req) {
@@ -372,32 +346,23 @@ function getCookieToken(req) {
 
   const cookies = {};
 
-  header
-    .split(";")
-    .forEach((part) => {
-      const index =
-        part.indexOf("=");
+  header.split(";").forEach((part) => {
+    const index = part.indexOf("=");
 
-      if (index === -1) {
-        return;
-      }
+    if (index === -1) {
+      return;
+    }
 
-      const key =
-        part
-          .slice(0, index)
-          .trim();
+    const key =
+      part.slice(0, index).trim();
 
-      const value =
-        part
-          .slice(index + 1)
-          .trim();
+    const value =
+      part.slice(index + 1).trim();
 
-      cookies[key] = value;
-    });
+    cookies[key] = value;
+  });
 
-  if (
-    !cookies.goldai_session
-  ) {
+  if (!cookies.goldai_session) {
     return null;
   }
 
@@ -422,9 +387,7 @@ function getSession(req) {
     const parts =
       token.split(".");
 
-    if (
-      parts.length !== 2
-    ) {
+    if (parts.length !== 2) {
       return null;
     }
 
@@ -454,10 +417,7 @@ function getSession(req) {
 
     if (
       a.length !== b.length ||
-      !crypto.timingSafeEqual(
-        a,
-        b
-      )
+      !crypto.timingSafeEqual(a, b)
     ) {
       return null;
     }
@@ -485,16 +445,10 @@ function getSession(req) {
   }
 }
 
-function setSessionCookie(
-  req,
-  res,
-  token
-) {
+function setSessionCookie(req, res, token) {
   const secure =
     (
-      req.headers[
-        "x-forwarded-proto"
-      ] || ""
+      req.headers["x-forwarded-proto"] || ""
     ) === "https"
       ? "; Secure"
       : "";
@@ -508,15 +462,10 @@ function setSessionCookie(
   );
 }
 
-function clearSessionCookie(
-  req,
-  res
-) {
+function clearSessionCookie(req, res) {
   const secure =
     (
-      req.headers[
-        "x-forwarded-proto"
-      ] || ""
+      req.headers["x-forwarded-proto"] || ""
     ) === "https"
       ? "; Secure"
       : "";
@@ -537,14 +486,10 @@ function formatUser(row) {
     id: row.id,
     name: row.name,
     email: row.email,
-    approved:
-      Boolean(row.approved),
+    approved: Boolean(row.approved),
     emailVerified:
-      Boolean(
-        row.email_verified
-      ),
-    createdAt:
-      row.created_at
+      Boolean(row.email_verified),
+    createdAt: row.created_at
   };
 }
 
@@ -589,7 +534,7 @@ async function requireUser(
     req.user = rows[0];
 
     next();
-  } catch (error) {
+  } catch {
     res.status(500).json({
       error:
         "Authentication failed."
@@ -633,9 +578,7 @@ async function requireApprovedUser(
 
     req.user = rows[0];
 
-    if (
-      !req.user.approved
-    ) {
+    if (!req.user.approved) {
       return res.status(403).json({
         error:
           "Payment approval is required before using this feature."
@@ -687,11 +630,7 @@ const upload =
     },
 
     fileFilter:
-      (
-        req,
-        file,
-        cb
-      ) => {
+      (req, file, cb) => {
         const allowed = [
           "image/png",
           "image/jpeg",
@@ -714,6 +653,106 @@ const upload =
         cb(null, true);
       }
   });
+
+/* =====================================================
+   USERS ID HELPER
+   FIXES:
+   null value in column "id"
+   of relation "users"
+===================================================== */
+
+async function getNextUserId() {
+  const info =
+    await sql`
+      SELECT
+        data_type,
+        udt_name,
+        column_default,
+        is_identity
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'users'
+        AND column_name = 'id'
+      LIMIT 1
+    `;
+
+  if (!info.length) {
+    throw new Error(
+      "The users.id column was not found."
+    );
+  }
+
+  const dataType =
+    String(
+      info[0].data_type || ""
+    ).toLowerCase();
+
+  const udtName =
+    String(
+      info[0].udt_name || ""
+    ).toLowerCase();
+
+  const hasDefault =
+    Boolean(
+      info[0].column_default
+    );
+
+  const isIdentity =
+    info[0].is_identity === "YES";
+
+  if (
+    hasDefault ||
+    isIdentity
+  ) {
+    return null;
+  }
+
+  if (
+    dataType === "uuid" ||
+    udtName === "uuid" ||
+    dataType === "text" ||
+    dataType === "character varying" ||
+    dataType === "character"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  if (
+    dataType === "integer" ||
+    dataType === "bigint" ||
+    dataType === "smallint"
+  ) {
+    const rows =
+      await sql`
+        SELECT
+          MAX(id) AS max_id
+        FROM users
+      `;
+
+    const raw =
+      rows[0]?.max_id;
+
+    const maxId =
+      raw === null ||
+      raw === undefined ||
+      raw === ""
+        ? 0
+        : Number(raw);
+
+    if (!Number.isFinite(maxId)) {
+      throw new Error(
+        "Could not determine the next users.id."
+      );
+    }
+
+    return Math.floor(maxId) + 1;
+  }
+
+  throw new Error(
+    "Unsupported users.id type: " +
+    dataType
+  );
+}
 
 /* =====================================================
    REGISTER
@@ -751,9 +790,7 @@ app.post(
         });
       }
 
-      if (
-        password.length < 6
-      ) {
+      if (password.length < 6) {
         return res.status(400).json({
           error:
             "Password must be at least 6 characters."
@@ -778,26 +815,78 @@ app.post(
       const passwordData =
         hashPassword(password);
 
-      const rows =
-        await sql`
-          INSERT INTO users (
-            name,
-            email,
-            password_salt,
-            password_hash,
-            approved,
-            email_verified
-          )
-          VALUES (
-            ${name},
-            ${email},
-            ${passwordData.salt},
-            ${passwordData.hash},
-            FALSE,
-            FALSE
-          )
-          RETURNING *
-        `;
+      /*
+       * IMPORTANT:
+       *
+       * Existing users.id has no DEFAULT.
+       * Therefore we inspect the actual database
+       * column before inserting.
+       */
+      const generatedUserId =
+        await getNextUserId();
+
+      let rows;
+
+      if (
+        generatedUserId === null
+      ) {
+        /*
+         * PostgreSQL already generates the ID.
+         */
+        rows =
+          await sql`
+            INSERT INTO users (
+              name,
+              email,
+              password_salt,
+              password_hash,
+              approved,
+              email_verified
+            )
+            VALUES (
+              ${name},
+              ${email},
+              ${passwordData.salt},
+              ${passwordData.hash},
+              FALSE,
+              FALSE
+            )
+            RETURNING *
+          `;
+      } else {
+        /*
+         * Existing legacy database:
+         * explicitly provide users.id.
+         */
+        rows =
+          await sql`
+            INSERT INTO users (
+              id,
+              name,
+              email,
+              password_salt,
+              password_hash,
+              approved,
+              email_verified
+            )
+            VALUES (
+              ${generatedUserId},
+              ${name},
+              ${email},
+              ${passwordData.salt},
+              ${passwordData.hash},
+              FALSE,
+              FALSE
+            )
+            RETURNING *
+          `;
+      }
+
+      if (!rows.length) {
+        throw new Error(
+          "User account could not be created."
+        );
+      }
 
       setSessionCookie(
         req,
@@ -821,6 +910,19 @@ app.post(
         "REGISTER ERROR:",
         error
       );
+
+      if (
+        String(
+          error?.message || ""
+        ).includes(
+          "duplicate key"
+        )
+      ) {
+        return res.status(409).json({
+          error:
+            "An account with this email already exists."
+        });
+      }
 
       res.status(500).json({
         error:
@@ -1004,9 +1106,10 @@ app.get(
         approved,
         payments
       });
-    } catch {
+    } catch (error) {
       res.status(500).json({
         error:
+          error?.message ||
           "Could not check access."
       });
     }
@@ -1177,9 +1280,10 @@ app.get(
         signals:
           rows
       });
-    } catch {
+    } catch (error) {
       res.status(500).json({
         error:
+          error?.message ||
           "Could not load signals."
       });
     }
@@ -1190,9 +1294,7 @@ app.get(
    TIMEFRAME
 ===================================================== */
 
-function normalizeTimeframe(
-  value
-) {
+function normalizeTimeframe(value) {
   const v =
     String(
       value || ""
@@ -1228,9 +1330,7 @@ function normalizeTimeframe(
    AI RESPONSE HELPERS
 ===================================================== */
 
-function extractResponseText(
-  data
-) {
+function extractResponseText(data) {
   if (!data) {
     return "";
   }
@@ -1243,9 +1343,7 @@ function extractResponseText(
   }
 
   if (
-    Array.isArray(
-      data.output
-    )
+    Array.isArray(data.output)
   ) {
     let text = "";
 
@@ -1264,8 +1362,7 @@ function extractResponseText(
             typeof content.text ===
             "string"
           ) {
-            text +=
-              content.text;
+            text += content.text;
           }
         }
       }
@@ -1277,9 +1374,7 @@ function extractResponseText(
   return "";
 }
 
-function findJsonObject(
-  text
-) {
+function findJsonObject(text) {
   if (!text) {
     return null;
   }
@@ -1304,9 +1399,7 @@ function findJsonObject(
       .trim();
 
   try {
-    return JSON.parse(
-      cleaned
-    );
+    return JSON.parse(cleaned);
   } catch {}
 
   const first =
@@ -1355,10 +1448,7 @@ function normalizeAnalysis(
         parsed?.signal_probability ??
         ""
       )
-        .replace(
-          "%",
-          ""
-        )
+        .replace("%", "")
         .trim()
     );
 
@@ -1388,13 +1478,6 @@ function normalizeAnalysis(
       ? rawDirection
       : "WAIT";
 
-  /*
-   * FINAL SIGNAL RULE:
-   *
-   * < 20%  => WAIT
-   * >= 20% => BUY/SELL only when AI sees
-   *           a real directional setup.
-   */
   if (
     probability < 20
   ) {
@@ -1467,7 +1550,7 @@ function normalizeAnalysis(
 }
 
 /* =====================================================
-   FINAL FIX FOR analyses.id
+   ANALYSES ID HELPER
 ===================================================== */
 
 async function getNextAnalysisId() {
@@ -1509,10 +1592,6 @@ async function getNextAnalysisId() {
   const isIdentity =
     info[0].is_identity === "YES";
 
-  /*
-   * If PostgreSQL already has a DEFAULT or IDENTITY,
-   * let PostgreSQL generate the ID.
-   */
   if (
     hasDefault ||
     isIdentity
@@ -1520,9 +1599,6 @@ async function getNextAnalysisId() {
     return null;
   }
 
-  /*
-   * UUID / TEXT legacy ID.
-   */
   if (
     dataType === "uuid" ||
     udtName === "uuid" ||
@@ -1533,9 +1609,6 @@ async function getNextAnalysisId() {
     return crypto.randomUUID();
   }
 
-  /*
-   * INTEGER / BIGINT / SMALLINT legacy ID.
-   */
   const numeric =
     dataType === "integer" ||
     dataType === "bigint" ||
@@ -1548,42 +1621,29 @@ async function getNextAnalysisId() {
     );
   }
 
-  /*
-   * Do NOT use COALESCE here.
-   * MAX(id) is executed only after we confirmed
-   * that id is numeric.
-   */
   const rows =
     await sql`
       SELECT MAX(id) AS max_id
       FROM analyses
     `;
 
-  const maxRaw =
+  const raw =
     rows[0]?.max_id;
 
   const maxId =
-    maxRaw === null ||
-    maxRaw === undefined ||
-    maxRaw === ""
+    raw === null ||
+    raw === undefined ||
+    raw === ""
       ? 0
-      : Number(
-          maxRaw
-        );
+      : Number(raw);
 
-  if (
-    !Number.isFinite(
-      maxId
-    )
-  ) {
+  if (!Number.isFinite(maxId)) {
     throw new Error(
       "Could not determine the next analyses.id."
     );
   }
 
-  return Math.floor(
-    maxId
-  ) + 1;
+  return Math.floor(maxId) + 1;
 }
 
 /* =====================================================
@@ -1815,9 +1875,6 @@ Return JSON only.
           aiResult.data
         );
 
-      /*
-       * Retry if OpenAI returned no readable text.
-       */
       if (!responseText) {
         const retryPrompt = `
 Analyze this XAUUSD chart.
@@ -1898,8 +1955,7 @@ Return JSON only.
 
       if (
         !parsed ||
-        typeof parsed !==
-          "object"
+        typeof parsed !== "object"
       ) {
         console.error(
           "AI JSON ERROR:",
@@ -1918,14 +1974,6 @@ Return JSON only.
           timeframe
         );
 
-      /*
-       * FINAL ID FIX
-       *
-       * This is the important part.
-       *
-       * We no longer assume analyses.id has a DEFAULT.
-       * If it does not, a valid ID is generated explicitly.
-       */
       const generatedAnalysisId =
         await getNextAnalysisId();
 
@@ -1934,9 +1982,6 @@ Return JSON only.
       if (
         generatedAnalysisId === null
       ) {
-        /*
-         * PostgreSQL already generates ID.
-         */
         saved =
           await sql`
             INSERT INTO analyses (
@@ -1962,27 +2007,13 @@ Return JSON only.
               ${result.timeframe},
               ${result.direction},
               ${result.signal_probability},
-              ${String(
-                result.entry
-              )},
-              ${String(
-                result.tp1
-              )},
-              ${String(
-                result.tp2
-              )},
-              ${String(
-                result.tp3
-              )},
-              ${String(
-                result.tp4
-              )},
-              ${String(
-                result.tp5
-              )},
-              ${String(
-                result.sl
-              )},
+              ${String(result.entry)},
+              ${String(result.tp1)},
+              ${String(result.tp2)},
+              ${String(result.tp3)},
+              ${String(result.tp4)},
+              ${String(result.tp5)},
+              ${String(result.sl)},
               ${result.confidence},
               ${result.analysis},
               ${result.warning}
@@ -1990,10 +2021,6 @@ Return JSON only.
             RETURNING *
           `;
       } else {
-        /*
-         * Legacy database without ID DEFAULT.
-         * Explicitly provide the generated ID.
-         */
         saved =
           await sql`
             INSERT INTO analyses (
@@ -2021,27 +2048,13 @@ Return JSON only.
               ${result.timeframe},
               ${result.direction},
               ${result.signal_probability},
-              ${String(
-                result.entry
-              )},
-              ${String(
-                result.tp1
-              )},
-              ${String(
-                result.tp2
-              )},
-              ${String(
-                result.tp3
-              )},
-              ${String(
-                result.tp4
-              )},
-              ${String(
-                result.tp5
-              )},
-              ${String(
-                result.sl
-              )},
+              ${String(result.entry)},
+              ${String(result.tp1)},
+              ${String(result.tp2)},
+              ${String(result.tp3)},
+              ${String(result.tp4)},
+              ${String(result.tp5)},
+              ${String(result.sl)},
               ${result.confidence},
               ${result.analysis},
               ${result.warning}
@@ -2052,12 +2065,8 @@ Return JSON only.
 
       res.json({
         ok: true,
-
-        analysis:
-          result,
-
-        saved:
-          saved[0]
+        analysis: result,
+        saved: saved[0]
       });
     } catch (error) {
       console.error(
